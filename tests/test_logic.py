@@ -1,0 +1,68 @@
+from dataclasses import replace
+
+import pytest
+from games.coin_runner import player_costume
+from itchy.compiler import compile_game
+from itchy.game import (
+    Condition, Game, Key, NumberVariable, Sprite, forever, go_to,
+    if_else, if_then, key_down, move_x, on_start, repeat_until, touching,
+)
+from itchy.testing import Flag, Press, Release, Snapshot, Tick, simulate
+
+
+def test_arithmetic_branching_and_repeat_until() -> None:
+    count = NumberVariable("count")
+    result = NumberVariable("result")
+    game = Game("Logic", (count, result), (Sprite("Player", player_costume, (
+        on_start(
+            count.reset(), result.reset(),
+            repeat_until(count >= 3, count.add(1)),
+            if_else((count.equals(3) & ~(count < 0)) | (count > 10),
+                    then=result.set((count * 4 + 6) / 2 - 1),
+                    otherwise=result.set(-100)),
+            if_then(count <= 3, move_x(result)),
+            if_else(count < 0, then=result.set(-200), otherwise=result.add(2)),
+            if_then(count > 100, result.set(-300)),
+        ),
+    )),))
+    state = simulate(game, Flag(), Tick(30), Snapshot(("Player",), ("count", "result")))[0]
+    assert state["sprites"]["Player"]["x"] == 8
+    assert float(state["variables"]["count"]) == 3
+    assert float(state["variables"]["result"]) == 10
+
+
+def test_forever_reacts_to_key_state_and_releases() -> None:
+    count = NumberVariable("count")
+    game = Game("Continuous", (count,), (Sprite("Player", player_costume, (
+        on_start(go_to(0, 0), forever(if_then(key_down(Key.RIGHT), move_x(2)))),
+    )),))
+    snap = Snapshot(("Player",))
+    states = simulate(game, Flag(), Tick(5), snap, Press("ArrowRight"), Tick(10), snap,
+                      Release("ArrowRight"), Tick(3), snap, Tick(10), snap)
+    assert states[0]["sprites"]["Player"]["x"] == 0
+    assert states[1]["sprites"]["Player"]["x"] > 0
+    assert states[2]["sprites"]["Player"]["x"] == states[3]["sprites"]["Player"]["x"]
+
+
+def test_conditions_cannot_accidentally_run_in_python() -> None:
+    count = NumberVariable("count")
+    condition: Condition = count > 0
+    with pytest.raises(TypeError, match="build time"):
+        bool(condition)
+    with pytest.raises(TypeError, match="build time"):
+        bool(count + 1)
+
+
+def test_reporter_references_are_validated() -> None:
+    count = NumberVariable("count")
+    unknown = NumberVariable("unknown")
+    game = Game("Invalid", (count,), (Sprite("Player", player_costume, (
+        on_start(if_then(unknown > 0, count.add(1))),
+    )),))
+    with pytest.raises(ValueError, match="Undeclared variable"):
+        compile_game(game)
+    bad = replace(game, sprites=(replace(game.sprites[0], scripts=(
+        on_start(if_then(touching("Missing"), count.add(1))),
+    )),))
+    with pytest.raises(ValueError, match="Unknown touching target"):
+        compile_game(bad)

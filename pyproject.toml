@@ -6,7 +6,11 @@ requires-python = ">=3.12"
 dependencies = []
 
 [dependency-groups]
-dev = ["ty", "pytest"]
+dev = [
+    "ty",
+    "pytest",
+    "zensical==0.0.63",
+]
 
 [tool.ty.environment]
 root = ["."]
@@ -16,6 +20,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project.scripts]
+itchy = "itchy.cli:main"
 itchy-build = "itchy.build:main"
 itchy-preview = "itchy.server:main"
 

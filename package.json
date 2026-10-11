@@ -3,16 +3,19 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "uv run python -m itchy.build",
-    "dev": "uv run python -m itchy.server",
+    "build": "uv run itchy build",
+    "dev": "uv run itchy run --no-open",
     "test": "uv run pytest",
     "check": "uv run ty check",
-    "test:browser": "bun runner/browser-test.js"
+    "test:browser": "bun runner/browser-test.js",
+    "test:preview": "bun runner/browser-test.js --static"
   },
   "dependencies": {
-    "scratch-vm": "5.0.300",
+    "scratch-audio": "2.0.270",
     "scratch-render": "2.2.84",
-    "scratch-storage": "6.2.1"
+    "scratch-storage": "6.2.1",
+    "scratch-svg-renderer": "3.1.19",
+    "scratch-vm": "5.0.300"
   },
   "devDependencies": {
     "playwright": "latest"

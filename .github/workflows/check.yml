@@ -13,4 +13,5 @@ jobs:
       - run: uv run pytest
       - run: uv run python -m itchy.build
       - run: bun x playwright install --with-deps chromium
-      - run: bun run test:browser
+      - run: uv run itchy test --browser
+      - run: uv run itchy test --preview

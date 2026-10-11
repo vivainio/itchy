@@ -1,9 +1,10 @@
 <!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Scratch local playground</title>
 <style>body{font:17px system-ui;background:#111827;color:#f9fafb;max-width:720px;margin:48px auto;padding:0 20px}canvas{width:100%;max-width:480px;border-radius:16px;display:block;margin:24px 0}button,a{font:inherit;padding:10px 16px;border:0;border-radius:8px;background:#a78bfa;color:#111827;text-decoration:none;cursor:pointer}#status{color:#c4b5fd}</style>
 <h1>Scratch local playground</h1><p>Arrow keys move. Space adds a point. Restart resets the game.</p>
-<button id="start" disabled>Restart</button> <button id="stop" disabled>Stop</button> <a href="/game.sb3">Download .sb3</a>
+<button id="start" disabled>Restart</button> <button id="stop" disabled>Stop</button> <a id="download" href="/game.sb3">Download .sb3</a>
+<p><label>Game <select id="game"><option value="/game.sb3">Movement sandbox</option><option value="/logic.sb3">Coin collection</option><option value="/hide-and-seek.sb3">Hide and Seek</option></select></label></p>
 <canvas id="stage" width="480" height="360" tabindex="0" aria-label="Game stage"></canvas><p id="status">Loading runtime…</p>
-<script src="/vendor/vm.js"></script><script src="/vendor/render.js"></script><script src="/vendor/storage.js"></script>
+<script src="/vendor/bitmap.js"></script><script src="/vendor/audio.js"></script><script src="/vendor/vm.js"></script><script src="/vendor/render.js"></script><script src="/vendor/storage.js"></script>
 <script>
 (async () => {
   const status = document.querySelector('#status');
@@ -11,7 +12,10 @@
     const vm = new VirtualMachine();
     const canvas = document.querySelector('canvas');
     vm.attachStorage(new ScratchStorage.ScratchStorage());
+    vm.attachV2BitmapAdapter(new ScratchSVGRenderer.BitmapAdapter());
     vm.attachRenderer(new ScratchRender(canvas));
+    const audio = new ScratchAudio();
+    vm.attachAudioEngine(audio);
     vm.start();
     await vm.loadProject(await (await fetch('/game.sb3')).arrayBuffer());
     const held = new Set();
@@ -20,14 +24,24 @@
       if(['ArrowLeft','ArrowRight',' '].includes(event.key)) { event.preventDefault(); held.add(event.key); vm.postIOData('keyboard',{key:event.key,isDown:true}); }
     });
     window.addEventListener('keyup', event => { held.delete(event.key); vm.postIOData('keyboard',{key:event.key,isDown:false}); });
+    const mouseData = event => { const rect=canvas.getBoundingClientRect(); return { x:event.clientX-rect.left, y:event.clientY-rect.top, canvasWidth:rect.width, canvasHeight:rect.height }; };
+    canvas.addEventListener('mousemove', event => vm.postIOData('mouse', mouseData(event)));
+    canvas.addEventListener('mousedown', event => vm.postIOData('mouse', {...mouseData(event), isDown:true}));
+    window.addEventListener('mouseup', event => vm.postIOData('mouse', {...mouseData(event), isDown:false}));
     window.addEventListener('blur',release);
-    const restart = () => { release(); vm.greenFlag(); canvas.focus(); };
+    const restart = () => { release(); audio.audioContext.resume(); vm.greenFlag(); canvas.focus(); };
+    document.querySelector('#game').onchange = async event => {
+      release(); vm.stopAll();
+      await vm.loadProject(await (await fetch(event.target.value)).arrayBuffer());
+      document.querySelector('#download').href = event.target.value;
+      restart();
+    };
     document.querySelector('#start').onclick = restart;
     document.querySelector('#stop').onclick = () => { release(); vm.stopAll(); };
     document.querySelectorAll('button').forEach(b => b.disabled = false);
     window.scratchVM = vm;
     restart();
-    setInterval(() => { const player=vm.runtime.targets.find(t=>t.getName()==='Player'); const score=vm.runtime.getTargetForStage().lookupVariableByNameAndType('score',''); status.textContent=`Ready · x: ${player.x} · score: ${score.value}`; },100);
+    setInterval(() => { const player=vm.runtime.targets.find(t=>t.getName()==='Player') ?? vm.runtime.targets.find(t=>!t.isStage); const stage=vm.runtime.getTargetForStage(); if (!player || !stage) { status.textContent='Loading project…'; return; } const score=stage.lookupVariableByNameAndType('score',''); status.textContent=`Ready · x: ${player.x} · score: ${score?.value ?? 0}`; },100);
   } catch(error) { status.textContent = `Failed: ${error.message}`; console.error(error); }
 })();
 </script></html>
