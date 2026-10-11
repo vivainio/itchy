@@ -10,7 +10,7 @@ All authoring names below are exported from `itchy.game`.
 | `Sprite(name, costume, scripts, x=0, y=0, sounds=(), costumes=(), procedures=())` | Sprite target |
 | `Costume(svg, center_x=20, center_y=20)` | Inline SVG or image-file path |
 | `Sound(name, source, rate=0, sample_count=0)` | Embedded WAV/MP3 |
-| `NumberVariable(name, initial=0)` | Declared numeric variable and reporter |
+| `Num(name, initial=0)` | Declared numeric variable and reporter |
 | `Message(name)` | Declared broadcast reference |
 | `Command` | Union of individual commands |
 | `Steps` | Command or nested sequence of steps |
@@ -33,7 +33,7 @@ All authoring names below are exported from `itchy.game`.
 | `repeat(times, *steps)` | Literal or numeric-reporter count loop |
 | `repeat_until(condition, *steps)` | Conditional loop |
 | `forever(*steps)` | Unbounded loop |
-| `if_(condition).then(*steps).else_(*steps)` | Fluent conditional branches; else is optional |
+| `if_(condition).then_(*steps).else_(*steps)` | Fluent conditional branches; else is optional |
 | `if_then(condition, *steps)` | Conditional body |
 | `if_else(condition, then=steps, otherwise=steps)` | Conditional branches |
 | `wait(seconds)` | Wall-clock wait |
@@ -67,7 +67,7 @@ Costumes retain the names `Default`, `Costume 2`, `Costume 3`, etc. To author st
 
 ## Runtime strings and lists
 
-Declare `StringVariable(name, initial="")` in `Game.variables`. Its `.set(value)` accepts text, numeric reporters, and string reporters; `.equals(value)` creates a condition. `join(left, right, *parts)` (concatenates two or more values), `letter(index, text)` (one-based), `length(text)`, and `contains(text, part)` run in Scratch.
+Declare `String(name, initial="")` in `Game.variables`. Its `.set(value)` accepts text, numeric reporters, and string reporters; `.equals(value)` creates a condition. `join(left, right, *parts)` (concatenates two or more values), `letter(index, text)` (one-based), `length(text)`, and `contains(text, part)` run in Scratch.
 
 Math reporters have named helpers: `abs_number`, `floor`, `ceil`, `sqrt`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `ln`, `log10`, `exp`, and `pow10`. Each takes one value. Trigonometric helpers use degrees, matching Scratch. `math_op(operation, value)` remains available for generic operations.
 
@@ -75,7 +75,7 @@ Declare `ScratchList(name, initial=())` in `Game.lists`. Methods are `.append(va
 
 ```python
 words = ScratchList("words", ("hello",))
-text = StringVariable("text")
+text = String("text")
 script = on_start(words.append("world"), text.set(join(words.item(1), "!")))
 # Include words in Game.lists and text in Game.variables.
 ```
@@ -92,7 +92,7 @@ def walk(distance):
 player = Sprite("Player", costume, (on_start(walk(20)),), procedures=(walk,))
 ```
 
-The compiler builds the function body once with argument reporters. Calls remain native Scratch custom-block calls. Bodies can call procedures declared later or call themselves recursively. Annotate Boolean parameters with `bool`. Parameters must be positional. Imports also retain the original `proccode`, argument names, IDs, and defaults in decorator options.
+The compiler builds the function body once with argument reporters. Calls remain native Scratch custom-block calls. Bodies can call procedures declared later or call themselves recursively. Annotate Boolean parameters with `bool`. Parameters must be positional. Imports use original Scratch block and argument names, including their case, as Python function and parameter names where valid and unambiguous. They infer argument types and defaults from the function signature and regenerate argument IDs. Decorator options retain labels that require renamed parameters, custom `proccode` layouts, and defaults that cannot be represented by the signature.
 
 `Procedure(name, arguments=(), body=(), warp=False)` defines a native Scratch custom block. Declare it in `Sprite.procedures`. Calling the procedure returns a command with checked argument count. Arguments belong to their procedure and cannot be used in unrelated scripts.
 

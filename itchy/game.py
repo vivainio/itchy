@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 import inspect
 import re
@@ -175,7 +175,7 @@ def touching(target: Sprite | str) -> Condition:
 
 
 @dataclass(frozen=True, eq=False)
-class NumberVariable(NumberExpression):
+class Num(NumberExpression):
     name: str
     initial: float = 0
     id: str | None = None
@@ -209,13 +209,13 @@ class MoveX:
 
 @dataclass(frozen=True)
 class SetVariable:
-    variable: NumberVariable
+    variable: Num
     value: Number
 
 
 @dataclass(frozen=True)
 class ChangeVariable:
-    variable: NumberVariable
+    variable: Num
     value: Number
 
 
@@ -256,7 +256,7 @@ class ElifBuilder:
     root: If
     condition: Condition
 
-    def then(self, *steps: Steps) -> If:
+    def then_(self, *steps: Steps) -> If:
         return self.root._append_elif(If(self.condition, flatten(steps)))
 
 
@@ -264,7 +264,7 @@ class ElifBuilder:
 class IfBuilder:
     condition: Condition
 
-    def then(self, *steps: Steps) -> If:
+    def then_(self, *steps: Steps) -> If:
         return If(self.condition, flatten(steps))
 
 
@@ -375,7 +375,7 @@ class Sprite:
     sounds: tuple[Sound, ...] = ()
     costumes: tuple[Costume, ...] = ()
     procedures: tuple[Procedure, ...] = ()
-    variables: tuple[NumberVariable | StringVariable, ...] = ()
+    variables: tuple[Num | String, ...] = ()
     lists: tuple[ScratchList, ...] = ()
     size: float = 100
     direction: float = 90
@@ -388,15 +388,44 @@ class Sprite:
 
 
 @dataclass(frozen=True)
+class Monitor:
+    target: Num | String | ScratchList
+    x: float = 0
+    y: float = 0
+    visible: bool = False
+    width: float = 0
+    height: float = 0
+    mode: str | None = None
+    value: object = None
+    slider_min: float = 0
+    slider_max: float = 100
+    is_discrete: bool = True
+
+
+@dataclass(frozen=True)
+class ReporterMonitor:
+    opcode: str
+    sprite_name: str | None = None
+    params: dict[str, object] = field(default_factory=dict)
+    x: float = 0
+    y: float = 0
+    visible: bool = False
+    width: float = 0
+    height: float = 0
+    mode: str = "default"
+    value: object = 0
+
+
+@dataclass(frozen=True)
 class Game:
     name: str
-    variables: tuple[NumberVariable | StringVariable, ...]
+    variables: tuple[Num | String, ...]
     sprites: tuple[Sprite, ...]
     messages: tuple[Message, ...] = ()
     lists: tuple[ScratchList, ...] = ()
     extensions: tuple[str, ...] = ()
     stage: Sprite | None = None
-    monitors: tuple[dict[str, object], ...] = ()
+    monitors: tuple[Monitor | ReporterMonitor | dict[str, object], ...] = ()
     meta: dict[str, object] | None = None
     tempo: float = 60
     video_transparency: float = 50
@@ -475,8 +504,8 @@ class ScratchLiteral(NumberExpression):
 
 
 # Native blocks use the input/field names from Scratch's block definitions.
-type Value = str | Number | Condition | StringVariable | NativeReporter | NativeCondition | Argument | ScratchList | ScratchLiteral
-type FieldValue = str | NumberVariable | StringVariable | ScratchList
+type Value = str | Number | Condition | String | NativeReporter | NativeCondition | Argument | ScratchList | ScratchLiteral
+type FieldValue = str | Num | String | ScratchList
 
 
 @dataclass(frozen=True)
@@ -530,7 +559,7 @@ def on_event(event: NativeCommand, *steps: Steps) -> Script:
 
 
 @dataclass(eq=False)
-class StringVariable(NumberExpression):
+class String(NumberExpression):
     name: str
     initial: str = ""
     id: str | None = None

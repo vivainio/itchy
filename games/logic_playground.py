@@ -2,15 +2,15 @@
 from pathlib import Path
 
 from itchy.game import (
-    Command, Costume, Game, Message, broadcast, on_message, NumberVariable, Sound, Sprite, play_sound, forever, go_to, hide,
+    Command, Costume, Game, Message, broadcast, on_message, Num, Sound, Sprite, play_sound, forever, go_to, hide,
     horizontal_controls, if_, on_start, show, touching,
 )
 
 assets = Path(__file__).parent / "assets"
 player_costume = Costume(assets / "player.svg")
 collect_sound = Sound("Collect", assets / "collect.wav")
-score = NumberVariable("score")
-collected = NumberVariable("collected")
+score = Num("score")
+collected = Num("collected")
 ready = Message("ready")
 reset_player: list[Command] = [go_to(0, 0), score.reset(), broadcast(ready)]
 prepare_coin: list[Command] = [go_to(80, 0), collected.reset(), show()]
@@ -21,7 +21,7 @@ player = Sprite("Player", player_costume, (
     *horizontal_controls(step=10),
 ))
 watch_for_player = forever(
-    if_(collected.equals(0) & touching(player)).then(collect_coin),
+    if_(collected.equals(0) & touching(player)).then_(collect_coin),
 )
 coin = Sprite("Coin", Costume(assets / "coin.png"), (
     on_message(ready, prepare_coin, watch_for_player),

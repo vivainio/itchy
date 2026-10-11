@@ -49,13 +49,13 @@ Original: [Pong Starter](https://scratch.mit.edu/projects/10128515/) by **Scratc
 
 | Original behavior | Translation status |
 | --- | --- |
-| Ball initializes at a position and direction | Position supported; direction command still needed |
-| Ball moves and bounces at edges forever | Loop supported; directional movement and edge bounce still needed |
-| Paddle follows mouse x | Mouse-position reporter and x setter still needed |
-| Touch paddle; sound; randomized turn; move away | Touching, sound, conditions, and random reporters supported; turning still needed |
-| Touch losing color; stop | Color sensing and stop command still needed |
+| Ball initializes at a position and direction | Supported with `go_to` and `point_direction` |
+| Ball moves and bounces at edges forever | Supported with `forever`, `move`, and `bounce` |
+| Paddle follows mouse x | Supported with `set_x(mouse_x())` |
+| Touch paddle; sound; randomized turn; move away | Supported with `touching`, `play_sound`, `if_`, `random_number`, and `turn` |
+| Touch losing color; stop | `stop` supported; color sensing available through `predicate("sensing_touchingcolor", ...)` |
 
-This is a roadmap derived from the actual source, not a runnable Pong port. Implement the missing typed operations, translate each independent event script, then test paddle movement, contact response, loss, and restart before including the exported game in the showcase. Preserve the original author and project attribution if adapting its scripts or assets.
+This is a roadmap derived from the actual source, not a runnable Pong port. Translate each independent event script using the current builders, then test paddle movement, contact response, loss, and restart before including the exported game in the showcase. Preserve the original author and project attribution if adapting its scripts or assets.
 
 ## Add another recreation
 

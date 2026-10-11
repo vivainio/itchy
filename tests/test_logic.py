@@ -4,24 +4,24 @@ import pytest
 from games.coin_runner import player_costume
 from itchy.compiler import compile_game
 from itchy.game import (
-    Condition, Game, Key, NumberVariable, Sprite, forever, go_to,
+    Condition, Game, Key, Num, Sprite, forever, go_to,
     if_, if_else, if_then, key_down, move_x, on_start, repeat_until, touching,
 )
 from itchy.testing import Flag, Press, Release, Snapshot, Tick, simulate
 
 
 def test_arithmetic_branching_and_repeat_until() -> None:
-    count = NumberVariable("count")
-    result = NumberVariable("result")
+    count = Num("count")
+    result = Num("result")
     game = Game("Logic", (count, result), (Sprite("Player", player_costume, (
         on_start(
             count.reset(), result.reset(),
             repeat_until(count >= 3, count.add(1)),
             if_((count.equals(3) & ~(count < 0)) | (count > 10))
-                .then([result.set((count * 4 + 6) / 2 - 1)])
+                .then_([result.set((count * 4 + 6) / 2 - 1)])
                 .else_([result.set(-100)]),
             if_then(count <= 3, move_x(result)),
-            if_(count < 0).then(result.set(-200)).else_(result.add(2)),
+            if_(count < 0).then_(result.set(-200)).else_(result.add(2)),
             if_then(count > 100, result.set(-300)),
         ),
     )),))
@@ -32,7 +32,7 @@ def test_arithmetic_branching_and_repeat_until() -> None:
 
 
 def test_forever_reacts_to_key_state_and_releases() -> None:
-    count = NumberVariable("count")
+    count = Num("count")
     game = Game("Continuous", (count,), (Sprite("Player", player_costume, (
         on_start(go_to(0, 0), forever(if_then(key_down(Key.RIGHT), move_x(2)))),
     )),))
@@ -45,7 +45,7 @@ def test_forever_reacts_to_key_state_and_releases() -> None:
 
 
 def test_conditions_cannot_accidentally_run_in_python() -> None:
-    count = NumberVariable("count")
+    count = Num("count")
     condition: Condition = count > 0
     with pytest.raises(TypeError, match="build time"):
         bool(condition)
@@ -54,8 +54,8 @@ def test_conditions_cannot_accidentally_run_in_python() -> None:
 
 
 def test_reporter_references_are_validated() -> None:
-    count = NumberVariable("count")
-    unknown = NumberVariable("unknown")
+    count = Num("count")
+    unknown = Num("unknown")
     game = Game("Invalid", (count,), (Sprite("Player", player_costume, (
         on_start(if_then(unknown > 0, count.add(1))),
     )),))
@@ -70,11 +70,11 @@ def test_reporter_references_are_validated() -> None:
 
 @pytest.mark.parametrize('value, expected', [(0, 10), (1, 20), (2, 30), (3, 40)])
 def test_elif_chain_selects_one_branch(value, expected):
-    count = NumberVariable('count', value)
-    result = NumberVariable('result')
-    first = if_(count.equals(0)).then(result.set(10))
-    chain = (first.elif_(count.equals(1)).then(result.set(20))
-             .elif_(count.equals(2)).then(result.set(30))
+    count = Num('count', value)
+    result = Num('result')
+    first = if_(count.equals(0)).then_(result.set(10))
+    chain = (first.elif_(count.equals(1)).then_(result.set(20))
+             .elif_(count.equals(2)).then_(result.set(30))
              .else_(result.set(40)))
     assert first.otherwise is None
     game = Game('Branches', (count, result), (Sprite('Player', player_costume, (

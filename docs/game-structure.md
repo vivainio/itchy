@@ -6,12 +6,12 @@ A `Game` contains declared variables, sprites, and optional messages. Each sprit
 from pathlib import Path
 
 from itchy.game import (
-    Costume, Game, Key, NumberVariable, Sprite,
+    Costume, Game, Key, Num, Sprite,
     go_to, move_x, on_key, on_start,
 )
 
 assets = Path(__file__).parent / "assets"
-score = NumberVariable("score", initial=0)
+score = Num("score", initial=0)
 player = Sprite(
     name="Player",
     costume=Costume(assets / "player.svg"),
@@ -44,3 +44,19 @@ tests/test_my_game.py
 ```
 
 Use [named lists](sequences.md) for fixed sequences and typed `@action` functions when parameters change what is generated.
+
+## Starter and imported projects
+
+`itchy init` uses the importer's module layout: `game.py` assembles `stage.py` and two `sprite_*.py` modules. Shared declarations live in `vars.py`, `lists.py`, and `messages.py`; sprite-local variables live in a `svars` class inside their sprite module.
+
+The starter discovers shared declarations with reflection:
+
+```python
+import vars
+from itchy.game import Num, String
+
+variables = tuple(value for value in vars.__dict__.values()
+                  if isinstance(value, (Num, String)))
+```
+
+Pass that tuple as `Game.variables`. The starter applies the same pattern to `ScratchList` and `Message`. Add each declaration once in its module; helper values and imported classes are excluded by the type filter. Use one module name per declaration to avoid discovering aliases twice. Sprite-local declarations remain in `Sprite.variables`.

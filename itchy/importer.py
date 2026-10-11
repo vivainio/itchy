@@ -108,11 +108,13 @@ class PythonImporter:
         self.target_sounds: dict[str, dict[str, str]] = {}
         self.lines: list[str] = []
         self.variable_lines: list[str] = []
+        self.list_lines: list[str] = []
+        self.message_lines: list[str] = []
         self.target_lines: dict[str, list[str]] = {}
         self.target_variable_lines: dict[str, list[str]] = {}
         self.module_sources: dict[str, str] = {}
         self.variable_names: set[str] = set()
-        self.used_names: set[str] = {'svars', 'vars', '_root', 'shared'}
+        self.used_names: set[str] = {'svars', 'vars', '_root', 'lists', 'messages'}
         self._prepare_declarations()
 
     def _name(self, value: str, fallback: str, *, prefix: str = "") -> str:
@@ -129,9 +131,17 @@ class PythonImporter:
         self.used_names.add(name)
         return name
 
-    def _procedure_name(self, proccode: str, fallback: str) -> str:
-        label = re.sub(r"%[bs]", " ", proccode)
-        return self._name(label, fallback, prefix="custom")
+    def _procedure_name(self, proccode: str, fallback: str, used: set[str]) -> str:
+        label = re.sub(r"%[bs]", " ", proccode).strip()
+        base = (label if label.isidentifier() and not keyword.iskeyword(label)
+                else _python_attribute(re.sub(r'[^\w]+', '_', label).strip('_'), fallback))
+        name = base
+        suffix = 2
+        while name in used:
+            name = f'{base}_{suffix}'
+            suffix += 1
+        used.add(name)
+        return name
 
     def _prepare_declarations(self) -> None:
         for target_index, target in enumerate(self.targets):
@@ -155,8 +165,8 @@ class PythonImporter:
                 self.vars[str(item_id)] = (symbol, target_key)
                 target_vars[str(item_id)] = symbol
                 value = data[1]
-                cls = "NumberVariable" if isinstance(value, (int, float)) and not isinstance(value, bool) else "StringVariable"
-                declaration = f"{symbol} = {cls}({variable_name!r}, {value!r}, id={str(item_id)!r})"
+                cls = "Num" if isinstance(value, (int, float)) and not isinstance(value, bool) else "String"
+                declaration = f"{symbol} = {cls}({variable_name!r}, {value!r})"
                 if target.get('isStage'):
                     self.variable_lines.append(declaration)
                 else:
@@ -164,12 +174,19 @@ class PythonImporter:
             for item_id, data in target.get("lists", {}).items() if isinstance(target.get("lists"), dict) else ():
                 if not isinstance(data, list) or len(data) < 2:
                     continue
-                symbol = self._name(_string(data[0]), f"list_{target_index}")
-                self.lists[str(item_id)] = (symbol, target_key)
-                target_lists[str(item_id)] = symbol
+                symbol = _python_attribute(_string(data[0]), f"list_{target_index}")
+                base = symbol
+                suffix = 2
+                while symbol in self.used_names:
+                    symbol = f"{base}_{suffix}"
+                    suffix += 1
+                self.used_names.add(symbol)
+                reference = f'lists.{symbol}' if target.get('isStage') else symbol
+                self.lists[str(item_id)] = (reference, target_key)
+                target_lists[str(item_id)] = reference
                 values = tuple(data[1]) if isinstance(data[1], list) else ()
-                destination = self.lines if target.get('isStage') else self.target_lines[target_key]
-                destination.append(f"{symbol} = ScratchList({_string(data[0])!r}, {values!r}, id={str(item_id)!r})")
+                destination = self.list_lines if target.get('isStage') else self.target_lines[target_key]
+                destination.append(f"{symbol} = ScratchList({_string(data[0])!r}, {values!r})")
             self.target_vars[target_key] = target_vars
             self.target_lists[target_key] = target_lists
 
@@ -177,8 +194,8 @@ class PythonImporter:
         if isinstance(broadcasts, dict):
             for message_index, (message_id, name) in enumerate(broadcasts.items()):
                 symbol = self._name(_string(name), f"message_{message_index}")
-                self.messages[str(message_id)] = (symbol, _string(name))
-                self.lines.append(f"{symbol} = Message({_string(name)!r}, id={str(message_id)!r})")
+                self.messages[str(message_id)] = (f'messages.{symbol}', _string(name))
+                self.message_lines.append(f"{symbol} = Message({_string(name)!r})")
 
         for target_index, target in enumerate(self.targets):
             target_key = _string(target.get("name", f"target_{target_index}"))
@@ -187,6 +204,21 @@ class PythonImporter:
             if not isinstance(blocks, dict):
                 continue
             self.block_symbols[(target_key, "blocks")] = blocks
+            module_names = {'svars', 'vars', '_root', 'lists', 'messages', 'Path'}
+            module_names.update(self.target_lists[target_key].values())
+            module_names.update(_API_NAMES | _BUILTIN_NAMES)
+            procedure_names = {}
+            for candidate in blocks.values():
+                if (not isinstance(candidate, dict)
+                        or candidate.get('opcode') not in {'procedures_prototype', 'procedures_call'}):
+                    continue
+                mutation = candidate.get('mutation', {})
+                if not isinstance(mutation, dict):
+                    continue
+                code = _string(mutation.get('proccode', ''))
+                if code not in procedure_names:
+                    procedure_names[code] = self._procedure_name(
+                        code, f'procedure_{len(procedure_names) + 1}', module_names)
             definitions: list[tuple[str, dict[str, Any], dict[str, Any]]] = []
             for block_id, block in blocks.items():
                 if not isinstance(block, dict) or block.get("opcode") != "procedures_definition":
@@ -206,16 +238,21 @@ class PythonImporter:
                 defaults = self._json_array(mutation.get("argumentdefaults"))
                 argument_types = [piece == "%b" for piece in re.findall(r"%[bs]", proccode)]
                 args: list[str] = []
-                project_names = self.used_names
-                self.used_names = project_names.copy()
+                argument_names_used = module_names.copy()
                 for arg_index, arg_id in enumerate(ids):
                     arg_name = _string(names[arg_index]) if arg_index < len(names) else f"arg{arg_index + 1}"
-                    arg_symbol = self._name(arg_name, f"argument_{arg_index + 1}")
+                    base = (arg_name if arg_name.isidentifier() and not keyword.iskeyword(arg_name)
+                            else _python_attribute(arg_name, f"argument_{arg_index + 1}"))
+                    arg_symbol = base
+                    suffix = 2
+                    while arg_symbol in argument_names_used:
+                        arg_symbol = f'{base}_{suffix}'
+                        suffix += 1
+                    argument_names_used.add(arg_symbol)
                     args.append(arg_symbol)
                     self.argument_symbols[(target_key, str(block_id), _string(arg_id))] = arg_symbol
                     self.argument_names[(target_key, str(block_id), arg_name)] = arg_symbol
-                self.used_names = project_names
-                proc_symbol = self._procedure_name(proccode, f"procedure_{len(definitions) + 1}")
+                proc_symbol = procedure_names[proccode]
                 self.procedure_symbols[(target_key, _string(block_id))] = proc_symbol
                 procedure = {
                     "symbol": proc_symbol, "block_id": _string(block_id), "prototype_id": _string(proto_id),
@@ -246,7 +283,7 @@ class PythonImporter:
                     self.argument_symbols[(target_key, synthetic_id, _string(arg_id))] = arg_symbol
 
                 procedure = {
-                    "symbol": self._procedure_name(proccode, f"procedure_{len(definitions) + 1}"), "block_id": synthetic_id,
+                    "symbol": procedure_names[proccode], "block_id": synthetic_id,
                     "prototype_id": "", "proccode": proccode, "argument_ids": ids,
                     "argument_names": [f"arg{i + 1}" for i in range(len(ids))],
                     "argument_defaults": [], "arguments": args, "warp": False, "body_id": None,
@@ -255,13 +292,43 @@ class PythonImporter:
                 defined_codes.add(proccode)
             self.procedures[target_key] = {str(proc["proccode"]): proc for _, proc, _ in definitions}
             for _, proc, _ in definitions:
-                self.lines.append(
-                    f"@procedure(warp={proc['warp']!r}, proccode={proc['proccode']!r}, "
-                    f"argument_names={tuple(proc['argument_names'])!r}, "
-                    f"argument_ids={tuple(proc['argument_ids'])!r}, "
-                    f"argument_defaults={tuple(proc['argument_defaults'])!r})"
+                slots = re.findall(r"%[bs]", proc['proccode'])
+                options = ['warp=True'] if proc['warp'] else []
+                # A plain label followed by slots can be rebuilt from the signature.
+                suffix = ''.join(f' {slot}' for slot in slots)
+                label = proc['proccode'][:-len(suffix)] if suffix else proc['proccode']
+                if (label and len(slots) == len(proc['arguments'])
+                        and proc['proccode'] == label + suffix
+                        and not re.search(r'%[bs]', label)
+                        and sum(re.sub(r'(?: %[bs])+$', '', other['proccode']) == label
+                                for _, other, _ in definitions) == 1):
+                    if label != proc['symbol']:
+                        options.append(f'name={label!r}')
+                else:
+                    options.append(f"proccode={proc['proccode']!r}")
+                names = tuple(proc['argument_names'])
+                if names and names != tuple(proc['arguments']):
+                    options.append(f'argument_names={names!r}')
+                defaults = tuple(proc['argument_defaults'])
+                inferred_defaults = tuple(
+                    False if index < len(slots) and slots[index] == '%b' else ''
+                    for index in range(len(proc['arguments']))
                 )
-                self.lines.append(f"def {proc['symbol']}({', '.join(proc['arguments'])}):")
+                signature_defaults = bool(defaults and defaults != inferred_defaults
+                                          and len(defaults) == len(proc['arguments']))
+                if defaults and len(defaults) != len(proc['arguments']):
+                    # Some Scratch projects contain extra mutation defaults.
+                    options.append(f'argument_defaults={defaults!r}')
+                parameters = []
+                for index, argument in enumerate(proc['arguments']):
+                    parameter = argument
+                    if index < len(slots) and slots[index] == '%b':
+                        parameter += ': bool'
+                    if signature_defaults:
+                        parameter += f'={defaults[index]!r}'
+                    parameters.append(parameter)
+                self.lines.append(f"@procedure({', '.join(options)})")
+                self.lines.append(f"def {proc['symbol']}({', '.join(parameters)}):")
                 body = self._chain(target_key, _string(proc['body_id']),
                                    active_proc=_string(proc['block_id'])) if proc['body_id'] else '()'
                 self.lines.append(f"    return {body}")
@@ -571,15 +638,15 @@ class PythonImporter:
             return f"{list_name}.{method}({args})"
 
         if opcode == "control_if":
-            return f"if_({inp('CONDITION')}).then({substacks.get('SUBSTACK', '()')})"
+            return f"if_({inp('CONDITION')}).then_({substacks.get('SUBSTACK', '()')})"
         if opcode == "control_if_else":
-            branch = f"if_({inp('CONDITION')}).then({substacks.get('SUBSTACK', '()')})"
+            branch = f"if_({inp('CONDITION')}).then_({substacks.get('SUBSTACK', '()')})"
             otherwise = substacks.get('SUBSTACK2', '()')
             tail = ast.parse(otherwise, mode='eval').body
             if isinstance(tail, ast.Tuple) and len(tail.elts) == 1:
                 child = tail.elts[0]
                 base = child
-                while isinstance(base, ast.Call) and isinstance(base.func, ast.Attribute) and base.func.attr in {'then', 'else_', 'elif_'}:
+                while isinstance(base, ast.Call) and isinstance(base.func, ast.Attribute) and base.func.attr in {'then_', 'else_', 'elif_'}:
                     base = base.func.value
                 if isinstance(base, ast.Call) and isinstance(base.func, ast.Name) and base.func.id == 'if_':
                     base.func = ast.Attribute(value=ast.parse(branch, mode='eval').body, attr='elif_', ctx=ast.Load())
@@ -765,27 +832,31 @@ class PythonImporter:
         return "(" + ", ".join(commands) + ("," if len(commands) == 1 else "") + ")"
 
     def emit(self) -> str:
-        self.module_sources['shared.py'] = 'from itchy.game import *\n\n' + '\n'.join(self.lines) + '\n'
+        self.module_sources['lists.py'] = 'from itchy.game import ScratchList\n\n' + '\n'.join(self.list_lines) + '\n'
+        self.module_sources['messages.py'] = 'from itchy.game import Message\n\n' + '\n'.join(self.message_lines) + '\n'
         header = [
             '"""Python reconstruction of the imported Scratch project."""',
             "from pathlib import Path",
             "from itchy.game import *",
             "import vars",
-            "from shared import *",
+            "import lists",
+            "import messages",
             "",
             "_root = Path(__file__).parent",
             "",
         ]
         self.lines = ['"""Imported Scratch game assembled from sprite modules."""',
-                      'from itchy.game import Game', 'import vars', 'from shared import *', '']
+                      'from itchy.game import Game, Monitor, ReporterMonitor', 'import vars', 'import lists', 'import messages', '']
         game_lines = self.lines
         sprite_symbols: list[str] = []
+        target_symbols = []
         stage_symbol = "_stage"
         stage_name = _string(self.stage.get("name", "Stage")) if self.stage else "Stage"
         for target_index, target in enumerate(self.targets):
             target_key = _string(target.get("name", f"target_{target_index}"))
             is_stage = bool(target.get("isStage"))
             symbol = stage_symbol if is_stage else self._name(_string(target.get("name", "")), f"sprite_{target_index}")
+            target_symbols.append((symbol, target))
             module_name = 'stage' if is_stage else f'sprite_{symbol}'
             game_lines.append(f'from {module_name} import {symbol}')
             self.lines = header.copy()
@@ -882,7 +953,40 @@ class PythonImporter:
         self.lines.append("game = Game(")
         self.lines.append(f"    {_string(self.source.stem)!r}, variables={self._tuple_expr(global_vars)}, sprites={self._tuple_expr(sprites)},")
         self.lines.append(f"    messages={self._tuple_expr(messages)}, lists={self._tuple_expr(global_lists)}, extensions={extensions!r}, stage={stage},")
-        self.lines.append(f"    monitors={tuple(self.project.get('monitors', []))!r}, meta={self.project.get('meta', {})!r},")
+        monitors = []
+        for monitor in self.project.get('monitors', []):
+            item_id = monitor.get('id')
+            kind = 'lists' if monitor.get('opcode') == 'data_listcontents' else 'variables'
+            target = next((t for t in self.targets if item_id in t.get(kind, {})), None)
+            if target is None or monitor.get('opcode') not in ('data_listcontents', 'data_variable'):
+                args = [repr(monitor['opcode'])]
+                for key, alias, default in (('spriteName', 'sprite_name', None), ('params', 'params', {}),
+                                            ('x', 'x', 0), ('y', 'y', 0), ('visible', 'visible', False),
+                                            ('width', 'width', 0), ('height', 'height', 0),
+                                            ('mode', 'mode', 'default'), ('value', 'value', 0)):
+                    if monitor.get(key, default) != default:
+                        args.append(f"{alias}={monitor[key]!r}")
+                monitors.append(f"ReporterMonitor({', '.join(args)})")
+                continue
+            target_name = _string(target['name'])
+            if target.get('isStage'):
+                reference = (self.target_lists[target_name][item_id] if kind == 'lists'
+                             else f"vars.{self.target_vars[target_name][item_id]}")
+            else:
+                owner = next(symbol for symbol, t in target_symbols if t is target)
+                index = list(target[kind]).index(item_id)
+                reference = f"{owner}.{kind}[{index}]"
+            args = [reference]
+            defaults = {'x': 0, 'y': 0, 'visible': False, 'width': 0, 'height': 0,
+                        'mode': 'list' if kind == 'lists' else 'default',
+                        'sliderMin': 0, 'sliderMax': 100, 'isDiscrete': True,
+                        'value': target[kind][item_id][1]}
+            aliases = {'sliderMin': 'slider_min', 'sliderMax': 'slider_max', 'isDiscrete': 'is_discrete'}
+            for key, default in defaults.items():
+                if key in monitor and monitor[key] != default:
+                    args.append(f"{aliases.get(key, key)}={monitor[key]!r}")
+            monitors.append(f"Monitor({', '.join(args)})")
+        self.lines.append(f"    monitors={self._tuple_expr(tuple(monitors))}, meta={self.project.get('meta', {})!r},")
         if self.stage:
             self.lines.append(f"    tempo={self.stage.get('tempo', 60)!r}, video_transparency={self.stage.get('videoTransparency', 50)!r},")
             self.lines.append(f"    video_state={_string(self.stage.get('videoState', 'on'))!r}, text_to_speech_language={self.stage.get('textToSpeechLanguage')!r},")
@@ -1019,7 +1123,7 @@ def import_project(source: Path, directory: Path) -> None:
     vars_file = directory / "vars.py"
     vars_file.write_text(
         '"""Scratch variables imported from the source project."""\n'
-        "from itchy.game import NumberVariable, StringVariable\n\n"
+        "from itchy.game import Num, String\n\n"
         + "\n".join(importer.variable_lines)
         + "\n"
     )
@@ -1035,7 +1139,7 @@ def import_project(source: Path, directory: Path) -> None:
     (directory / "README.md").write_text(
         f"# {source.stem}\n\n"
         "This game was translated from Scratch into Python using itchy's native block builders. "
-        "`game.py` assembles the stage and sprite modules. Each sprite module defines its scripts, custom blocks, lists, costumes, sounds, and local variables in `class svars`. Global variables are in `vars.py`, broadcasts and global lists in `shared.py`, and assets in `assets/`.\n"
+        "`game.py` assembles the stage and sprite modules. Each sprite module defines its scripts, custom blocks, lists, costumes, sounds, and local variables in `class svars`. Global variables are in `vars.py`, global lists in `lists.py`, broadcasts in `messages.py`, and assets in `assets/`.\n"
     )
     notes = [
         f"# Import notes for {source.name}",

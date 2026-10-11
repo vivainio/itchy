@@ -10,13 +10,13 @@ itchy init
 itchy run
 ```
 
-`itchy init` creates a starter project in an empty directory. The starter includes `game.py`, `assets/player.svg`, `itchy.toml`, and `pyproject.toml`. Comments in `game.py` link to guides in this book.
+`itchy init` creates a starter project in an empty directory. The starter follows the same layout as an imported Scratch project: `game.py`, `stage.py`, `sprite_player.py`, `sprite_coin.py`, `vars.py`, `lists.py`, and `messages.py`, plus two SVG costumes, `itchy.toml`, and `pyproject.toml`. Comments in `game.py` link to this book.
 
 `itchy run` installs missing Scratch runtime dependencies in a user cache, compiles your game, and opens the player at `http://127.0.0.1:4317/`. The first run needs internet access. Automatic Bun setup supports macOS/Linux ARM64 and x64; install Bun manually on other platforms. No Scratch login is needed for local play.
 
 ## Create your game
 
-Edit `game.py`. The starter uses arrow keys to move and Space to add a point. Refresh the browser after editing the game; Restart resets it. See [Game structure](game-structure.md), [Logic](logic.md), and the [API reference](api.md) to add behavior.
+Edit `sprite_player.py` and `sprite_coin.py`. Arrow keys move the player; clicking the coin adds a point, records the score in a list, and relocates the coin. Add shared variables in `vars.py`, lists in `lists.py`, and broadcasts in `messages.py`; `game.py` discovers them by type through module reflection. Sprite-local variables live in a `svars` class and are declared on that sprite. Refresh the browser after editing the game; Restart resets it. See [Game structure](game-structure.md), [Logic](logic.md), and the [API reference](api.md) to add behavior.
 
 ```sh
 itchy run --port 4400 --no-open

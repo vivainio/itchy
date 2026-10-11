@@ -16,7 +16,7 @@ collect_coin: list[Command] = [
 ]
 
 on_start(reset_player)
-if_(touching(player)).then(collect_coin)
+if_(touching(player)).then_(collect_coin)
 ```
 
 The snippets assume the variables and sprite references from the enclosing game. There is no sequence-specific wrapper or syntax.
@@ -26,12 +26,12 @@ The snippets assume the variables and sprite references from the enclosing game.
 ```python
 decide_turn = (
     if_(health > 0)
-    .then(move_right)
+    .then_(move_right)
     .else_(reset_player)
 )
 ```
 
-Both branch bodies can be named Python lists. The underscore in `if_` and `else_` avoids Python keywords; `.then(...)` makes the conditional command complete.
+Both branch bodies can be named Python lists. The underscore in `if_` and `else_` avoids Python keywords; `.then_(...)` makes the conditional command complete.
 
 ## Compose lists
 

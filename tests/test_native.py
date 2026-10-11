@@ -6,8 +6,8 @@ from zipfile import ZipFile
 import pytest
 from itchy.compiler import compile_game
 from itchy.game import (
-    Argument, Costume, Game, NumberVariable, Procedure, ScratchList, Sprite,
-    StringVariable, block, clone, contains, delete_clone, flatten, go_to,
+    Argument, Costume, Game, Num, Procedure, ScratchList, Sprite,
+    String, block, clone, contains, delete_clone, flatten, go_to,
     if_then, join, length, move, move_y, next_costume, on_clone, on_start,
     point_direction, reporter, set_size, switch_costume,
 )
@@ -19,7 +19,7 @@ COSTUME = Costume('<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40
 def test_variadic_join_preserves_binary_block_structure():
     from dataclasses import asdict
 
-    value = StringVariable("value")
+    value = String("value")
     assert asdict(join(value, ";", 12, ";", "end")) == asdict(
         join(join(join(join(value, ";"), 12), ";"), "end")
     )
@@ -27,8 +27,8 @@ def test_variadic_join_preserves_binary_block_structure():
 
 def test_native_lists_strings_motion_and_procedures_in_vm():
     items = ScratchList("items", ("old",))
-    text = StringVariable("text")
-    count = NumberVariable("count")
+    text = String("text")
+    count = Num("count")
     distance = Argument("distance")
     walk = Procedure("walk", (distance,), flatten((move(distance), move_y(3))), warp=True)
     sprite = Sprite("Player", COSTUME, (on_start(
@@ -47,7 +47,7 @@ def test_native_lists_strings_motion_and_procedures_in_vm():
 
 
 def test_clones_execute_native_clone_event():
-    count = NumberVariable("clones")
+    count = Num("clones")
     game = Game("Clones", (count,), (Sprite("Player", COSTUME, (
         on_start(clone()), on_clone(count.add(1), delete_clone()),
     )),))
@@ -56,7 +56,7 @@ def test_clones_execute_native_clone_event():
 
 
 def test_generic_substacks_extensions_and_mutations():
-    count = NumberVariable("count")
+    count = Num("count")
     game = Game("Blocks", (count,), (Sprite("Player", COSTUME, (on_start(
         block("control_repeat", inputs={"TIMES": 3}, substacks={"SUBSTACK": flatten((count.add(2),))}),
         block("pen_clear"), count.set(reporter("operator_round", inputs={"NUM": count + 0.4})),
@@ -85,8 +85,8 @@ def test_native_references_are_validated():
 
 def test_stage_scripts_and_dynamic_repeat():
     from itchy.game import repeat
-    count = NumberVariable("count")
-    times = NumberVariable("times", 4)
+    count = Num("count")
+    times = Num("times", 4)
     game = Game("Stage", (count, times), (), stage=Sprite("Stage", COSTUME, (
         on_start(repeat(times, count.add(1))),
     )))
@@ -96,7 +96,7 @@ def test_stage_scripts_and_dynamic_repeat():
 
 def test_native_string_and_boolean_procedure_arguments():
     from itchy.game import predicate
-    text = StringVariable("text")
+    text = String("text")
     word = Argument("word")
     enabled = Argument("enabled", boolean=True)
     proc = Procedure("write", (word, enabled), flatten((
@@ -143,11 +143,11 @@ def test_procedure_decorator_supports_recursion_and_boolean_parameters():
 
     @procedure(warp=True)
     def recursive(distance):
-        return if_(distance > 0).then(move(distance), recursive(distance - 1))
+        return if_(distance > 0).then_(move(distance), recursive(distance - 1))
 
     @procedure()
     def choose(enabled: Condition):
-        return if_(enabled).then(move(5))
+        return if_(enabled).then_(move(5))
 
     game = Game('Recursive', (), (Sprite('Player', COSTUME, (
         on_start(point_direction(90), recursive(3), choose(reporter('operator_equals',

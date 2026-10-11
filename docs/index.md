@@ -23,7 +23,7 @@ collect_coin: list[Command] = [
 ]
 
 watch_for_player = forever(
-    if_(collected.equals(0) & touching(player)).then(collect_coin),
+    if_(collected.equals(0) & touching(player)).then_(collect_coin),
 )
 ```
 
@@ -41,6 +41,6 @@ The repository includes a movement/scoring sandbox and a collectible game with a
 
 ## Current scope
 
-Install itchy as a tool and use `itchy init` to create a project. The CLI loads the `game` declared in your project entry file. There is no general Scratch-to-Python importer. `@action` expands ordinary blocks rather than producing native Scratch “My Blocks” definitions. Python installation and generation are separate from the JavaScript runtime used for testing and preview.
+Install itchy as a tool and use `itchy init` to create a project. The CLI loads the `game` declared in your project entry file. `itchy import project.sb3` reconstructs Python modules, assets, and import notes from a Scratch project. `@action` expands ordinary blocks rather than producing native Scratch “My Blocks” definitions. Python installation and generation are separate from the JavaScript runtime used for testing and preview.
 
 The [API reference](api.md) lists supported operations. The [testing guide](testing.md) distinguishes headless VM tests from browser tests. See [Getting started](getting-started.md) for installation.

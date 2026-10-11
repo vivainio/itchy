@@ -1,11 +1,11 @@
 from pathlib import Path
 
 from itchy.game import (
-    Costume, Game, Key, NumberVariable, Sprite, action, go_to,
+    Costume, Game, Key, Num, Sprite, action, go_to,
     horizontal_controls, on_key, on_start,
 )
 
-score = NumberVariable("score", initial=0)
+score = Num("score", initial=0)
 assets = Path(__file__).parent / "assets"
 player_costume = Costume(assets / "player.svg")
 

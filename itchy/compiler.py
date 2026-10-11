@@ -10,9 +10,9 @@ from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 from itchy.game import (
     NativeCommand, NativeReporter, NativeCondition, Menu, Value, FieldValue,
-    StringVariable, ScratchList, Argument, Procedure, ProcedureCall,
+    String, ScratchList, Argument, Procedure, ProcedureCall,
     Broadcast, Message, Arithmetic, ChangeVariable, Command, Comparison, Condition, Costume, Forever,
-    Game, GoTo, If, Key, KeyDown, Logic, MoveX, Not, Number, NumberVariable,
+    Game, Monitor, ReporterMonitor, GoTo, If, Key, KeyDown, Logic, MoveX, Not, Number, Num,
     Repeat, RepeatUntil, SetVariable, Sound, PlaySound, Touching, Visibility, Wait, RandomNumber, ScratchLiteral,
 )
 
@@ -55,11 +55,16 @@ def compile_game(game: Game) -> bytes:
         raise ValueError("Sprite names must be unique and cannot be Stage")
     all_variables = (*game.variables, *(variable for sprite in game.sprites for variable in sprite.variables),
                      *((variable for variable in game.stage.variables) if game.stage is not None else ()))
-    if len({variable.name for variable in all_variables}) != len(all_variables) and any(variable.id is None for variable in all_variables):
-        raise ValueError("Variable names must be unique unless explicit Scratch ids are used")
+    variable_ids = {id(v): v.id or f"var:{v.name}" for v in game.variables}
+    list_ids = {id(v): v.id or f"list:{v.name}" for v in game.lists}
+    for owner in (*game.sprites, *((game.stage,) if game.stage is not None else ())):
+        for v in owner.variables:
+            variable_ids[id(v)] = v.id or f"var:{owner.name}:{v.name}"
+        for v in owner.lists:
+            list_ids[id(v)] = v.id or f"list:{owner.name}:{v.name}"
     declared = {id(variable): variable for variable in all_variables}
     for variable in all_variables:
-        if isinstance(variable, NumberVariable):
+        if isinstance(variable, Num):
             number(variable.initial)
     messages = {message.name: message for message in game.messages}
     if len(messages) != len(game.messages):
@@ -118,9 +123,9 @@ def compile_game(game: Game) -> bytes:
     )
     targets: list[Json] = [{
         **base, "isStage": True, "name": "Stage",
-        "variables": {v.id or f"var:{v.name}": [v.name, v.initial] for v in game.variables},
+        "variables": {variable_ids[id(v)]: [v.name, v.initial] for v in game.variables},
         "broadcasts": {m.id or f"message:{m.name}": m.name for m in game.messages},
-        "lists": {item.id or f"list:{item.name}": [item.name, list(item.initial)] for item in game.lists},
+        "lists": {list_ids[id(item)]: [item.name, list(item.initial)] for item in game.lists},
         "blocks": {}, "costumes": [costume(background, "Background")],
         "tempo": game.tempo, "videoTransparency": game.video_transparency, "videoState": game.video_state,
         "textToSpeechLanguage": game.text_to_speech_language,
@@ -149,10 +154,10 @@ def compile_game(game: Game) -> bytes:
                 raise ValueError(f"Undeclared message: {message.name}")
             return {field: [message.name, message.id or f"message:{message.name}"]}
 
-        def variable_fields(variable: NumberVariable | StringVariable) -> dict[str, Json]:
+        def variable_fields(variable: Num | String) -> dict[str, Json]:
             if declared.get(id(variable)) is not variable:
                 raise ValueError(f"Undeclared variable: {variable.name}")
-            return {"VARIABLE": [variable.name, variable.id or f"var:{variable.name}"]}
+            return {"VARIABLE": [variable.name, variable_ids[id(variable)]]}
 
         procedures = {id(proc): proc for proc in sprite.procedures}
         if len({proc.proccode or proc.name for proc in sprite.procedures}) != len(sprite.procedures):
@@ -162,12 +167,12 @@ def compile_game(game: Game) -> bytes:
         def native_fields(fields: dict[str, FieldValue]) -> dict[str, Json]:
             result: dict[str, Json] = {}
             for key, value in fields.items():
-                if isinstance(value, (NumberVariable, StringVariable)):
+                if isinstance(value, (Num, String)):
                     result[key] = variable_fields(value)["VARIABLE"]
                 elif isinstance(value, ScratchList):
                     if lists.get(id(value)) is not value:
                         raise ValueError(f"Undeclared list: {value.name}")
-                    result[key] = [value.name, value.id or f"list:{value.name}"]
+                    result[key] = [value.name, list_ids[id(value)]]
                 else:
                     result[key] = [value, None]
             return result
@@ -193,7 +198,7 @@ def compile_game(game: Game) -> bytes:
                 return [2, node] if isinstance(value, NativeCondition) else [3, node, [10, ""]]
             if isinstance(value, Condition):
                 return condition(value, parent)
-            if isinstance(value, StringVariable):
+            if isinstance(value, String):
                 node = add("data_variable", parent, fields=variable_fields(value))
                 return [3, node, [10, ""]]
             if isinstance(value, ScratchList):
@@ -226,7 +231,7 @@ def compile_game(game: Game) -> bytes:
         def numeric(value: Number | Condition, parent: str) -> list[Json]:
             if isinstance(value, str):
                 return [1, [10, value]]
-            if isinstance(value, (NativeReporter, Argument, StringVariable, ScratchList)):
+            if isinstance(value, (NativeReporter, Argument, String, ScratchList)):
                 return value_input(value, parent)
             if isinstance(value, NativeCondition):
                 return value_input(value, parent)
@@ -241,7 +246,7 @@ def compile_game(game: Game) -> bytes:
                 raise TypeError("Boolean literals are not game numbers")
             if isinstance(value, (int, float)):
                 return number(value)
-            if isinstance(value, NumberVariable):
+            if isinstance(value, Num):
                 reporter = add("data_variable", parent, fields=variable_fields(value))
             elif isinstance(value, RandomNumber):
                 reporter = add("operator_random", parent)
@@ -258,7 +263,7 @@ def compile_game(game: Game) -> bytes:
 
         def condition(value: Condition, parent: str) -> list[Json]:
             if isinstance(value, (NativeCondition, NativeReporter, Argument, ScratchLiteral,
-                                  NumberVariable, StringVariable, ScratchList, str)):
+                                  Num, String, ScratchList, str)):
                 return value_input(value, parent)
             if isinstance(value, (int, float)) and not isinstance(value, bool):
                 return number(value)
@@ -416,8 +421,8 @@ def compile_game(game: Game) -> bytes:
             blocks[hat].next = sequence(script.body, hat)
         target: dict[str, Json] = {
             **base, "isStage": False, "name": sprite.name,
-            "variables": {v.id or f"var:{v.name}": [v.name, v.initial] for v in sprite.variables},
-            "lists": {item.id or f"list:{item.name}": [item.name, list(item.initial)] for item in sprite.lists},
+            "variables": {variable_ids[id(v)]: [v.name, v.initial] for v in sprite.variables},
+            "lists": {list_ids[id(item)]: [item.name, list(item.initial)] for item in sprite.lists},
             "blocks": {key: block.json(i) for i, (key, block) in enumerate(blocks.items(), 1)},
             "costumes": [costume(c, c.name or ("Default" if i == 0 else f"Costume {i + 1}")) for i, c in enumerate((sprite.costume, *sprite.costumes))],
             "sounds": [sound(s) for s in sprite.sounds],
@@ -440,8 +445,41 @@ def compile_game(game: Game) -> bytes:
                     stage[key] = target[key]
         else:
             targets.append(target)
+    def serialize_monitor(monitor: Monitor | ReporterMonitor | dict[str, object]) -> dict[str, object]:
+        if isinstance(monitor, dict):
+            return monitor
+        if isinstance(monitor, ReporterMonitor):
+            return {"id": f"{monitor.sprite_name or 'Stage'}:{monitor.opcode}",
+                    "opcode": monitor.opcode, "spriteName": monitor.sprite_name,
+                    "params": monitor.params, "mode": monitor.mode, "value": monitor.value,
+                    "x": monitor.x, "y": monitor.y, "visible": monitor.visible,
+                    "width": monitor.width, "height": monitor.height,
+                    "sliderMin": 0, "sliderMax": 100, "isDiscrete": True}
+        target = monitor.target
+        is_list = isinstance(target, ScratchList)
+        identities = list_ids if is_list else variable_ids
+        if id(target) not in identities:
+            raise ValueError(f"Undeclared monitor target: {target.name}")
+        owner = next((sprite.name for sprite in game.sprites
+                      if any(item is target for item in (*sprite.variables, *sprite.lists))), None)
+        initial = list(target.initial) if is_list else target.initial
+        result: dict[str, object] = {
+            "id": identities[id(target)],
+            "mode": monitor.mode or ("list" if is_list else "default"),
+            "opcode": "data_listcontents" if is_list else "data_variable",
+            "params": {"LIST" if is_list else "VARIABLE": target.name},
+            "spriteName": owner,
+            "value": initial if monitor.value is None else monitor.value,
+            "width": monitor.width, "height": monitor.height,
+            "x": monitor.x, "y": monitor.y, "visible": monitor.visible,
+        }
+        if not is_list:
+            result.update(sliderMin=monitor.slider_min, sliderMax=monitor.slider_max,
+                          isDiscrete=monitor.is_discrete)
+        return result
+
     project: dict[str, object] = {
-        "targets": targets, "monitors": list(game.monitors), "extensions": list(game.extensions),
+        "targets": targets, "monitors": [serialize_monitor(m) for m in game.monitors], "extensions": list(game.extensions),
         "meta": game.meta or {"semver": "3.0.0", "vm": "0.2.0", "agent": "itchy"},
     }
     assets["project.json"] = json.dumps(project, allow_nan=False).encode()

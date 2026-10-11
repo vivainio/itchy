@@ -12,7 +12,7 @@ itchy init
 itchy run
 ```
 
-`itchy init` creates a starter `game.py`, an SVG costume, and project configuration in an empty directory. Edit `game.py` to create your game; its comments link to the **[itchy book](https://vivainio.github.io/itchy/)**. `itchy run` prepares the Scratch runtime and opens your game in a local browser. The first run needs internet access to install runtime dependencies.
+`itchy init` creates a starter with two sprite modules, a stage, shared variable/list/message modules, SVG costumes, and project configuration in an empty directory. Edit the sprite modules to create your game; its comments link to the **[itchy book](https://vivainio.github.io/itchy/)**. `itchy run` prepares the Scratch runtime and opens your game in a local browser. The first run needs internet access to install runtime dependencies.
 
 To translate a Scratch project into Python, run `itchy import my-game.sb3 [directory]`. This creates readable Python using itchy's purpose-built builders where available, copies costumes and sounds to `assets/`, and records unresolved source blocks and remaining generic fallbacks in `IMPORT_NOTES.md`. Custom blocks are reconstructed as Python `Procedure` objects. Run `itchy build` to export a new `.sb3` from the Python source.
 

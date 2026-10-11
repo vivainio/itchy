@@ -12,32 +12,91 @@ from itchy.game import Game
 
 BOOK = "https://vivainio.github.io/itchy/"
 STARTER = '''"""My first itchy game. Read the book: https://vivainio.github.io/itchy/"""
-from pathlib import Path
+from itchy.game import Game, Message, Monitor, Num, ScratchList, String
+import vars
+import lists
+import messages
+from stage import _stage
+from sprite_player import player
+from sprite_coin import coin
 
-from itchy.game import (
-    Costume, Game, Key, NumberVariable, Sprite,
-    go_to, horizontal_controls, on_key, on_start,
-)
-
-# Describe sprites and scripts: https://vivainio.github.io/itchy/game-structure/
-score = NumberVariable("score")
-# Add costumes and sounds: https://vivainio.github.io/itchy/assets/
-assets = Path(__file__).parent / "assets"
-player = Costume(assets / "player.svg")
-
-# Commands describe Scratch blocks; they run when their event fires.
-# Controls and conditions: https://vivainio.github.io/itchy/logic/
+# Discover shared declarations as you add them to their modules.
 # All available builders: https://vivainio.github.io/itchy/api/
 game = Game(
     name="My first game",
-    variables=(score,),
-    sprites=(Sprite("Player", player, (
-        on_start(go_to(0, 0), score.reset()),
-        *horizontal_controls(step=10),
-        on_key(Key.SPACE, score.add(1)),
-    )),),
+    variables=tuple(value for value in vars.__dict__.values()
+                    if isinstance(value, (Num, String))),
+    lists=tuple(value for value in lists.__dict__.values() if isinstance(value, ScratchList)),
+    messages=tuple(value for value in messages.__dict__.values() if isinstance(value, Message)),
+    stage=_stage,
+    sprites=(player, coin),
+    monitors=(Monitor(vars.score, x=10, y=10, visible=True),),
 )
 '''
+
+STARTER_MODULES = {
+    "vars.py": '''"""Shared variables, available to every sprite."""
+from itchy.game import Num, String
+
+score = Num("score")
+status = String("status", "Click the coin!")
+''',
+    "lists.py": '''"""Shared Scratch lists."""
+from itchy.game import ScratchList
+
+collected = ScratchList("collected")
+''',
+    "messages.py": '''"""Broadcasts coordinate initialization and sprite scripts."""
+from itchy.game import Message
+
+ready = Message("ready")
+''',
+    "stage.py": '''"""Reset shared state before starting the sprites."""
+from itchy.game import Costume, Sprite, broadcast, on_start
+import vars
+import lists
+import messages
+
+_stage = Sprite("Stage", Costume('<svg xmlns="http://www.w3.org/2000/svg" width="480" height="360"><rect width="480" height="360" fill="#f1f5f9"/></svg>'), (
+    on_start(vars.score.reset(), vars.status.set(vars.status.initial), lists.collected.clear(),
+             broadcast(messages.ready)),
+))
+''',
+    "sprite_player.py": '''"""Move with the arrow keys. Local variables live in svars."""
+from pathlib import Path
+from itchy.game import Costume, Key, Num, Sprite, go_to, move_x, on_key, on_message
+import messages
+
+_root = Path(__file__).parent
+
+
+class svars:
+    step = Num("step", 10)
+
+
+player = Sprite("Player", Costume(_root / "assets/player.svg"), (
+    on_message(messages.ready, svars.step.reset(), go_to(-80, 0)),
+    on_key(Key.RIGHT, move_x(svars.step)),
+    on_key(Key.LEFT, move_x(0 - svars.step)),
+), variables=(svars.step,))
+''',
+    "sprite_coin.py": '''"""Click the coin to score and record each collection in a list."""
+from pathlib import Path
+from itchy.game import Costume, Sprite, go_to, on_click, on_message, random_number, say, show
+import vars
+import lists
+import messages
+
+_root = Path(__file__).parent
+
+coin = Sprite("Coin", Costume(_root / "assets/coin.svg"), (
+    on_message(messages.ready, go_to(80, 0), show()),
+    on_click(vars.score.add(1), lists.collected.append(vars.score),
+             vars.status.set("Coin collected!"), say(vars.status, seconds=0.5),
+             go_to(random_number(-200, 200), random_number(-140, 140))),
+))
+''',
+}
 
 
 def init_project(directory: Path) -> None:
@@ -47,10 +106,12 @@ def init_project(directory: Path) -> None:
     directory.mkdir(parents=True, exist_ok=True)
     files = {
         "game.py": STARTER,
+        **STARTER_MODULES,
         "itchy.toml": '[project]\nentry = "game.py"\noutput = "dist"\n',
-        "pyproject.toml": '[project]\nname = "my-itchy-game"\nversion = "0.1.0"\nrequires-python = ">=3.12"\ndependencies = ["itchy>=0.1.0"]\n',
+        "pyproject.toml": '[project]\nname = "my-itchy-game"\nversion = "0.1.0"\nrequires-python = ">=3.12"\ndependencies = ["itchy>=0.1.2"]\n',
         ".gitignore": "dist/\n.venv/\n__pycache__/\n",
-        "README.md": f"# My itchy game\n\nRun `itchy run` to play. Edit `game.py` and restart to see changes.\nRun `itchy build` to export `dist/game.sb3` and a browser preview.\n\n[Learn to create games in the itchy book]({BOOK}).\n",
+        "README.md": f"# My itchy game\n\nRun `itchy run` to play. Move the player with the arrow keys and click the coin to score.\nEdit `sprite_player.py` and `sprite_coin.py` for behavior; add shared state in `vars.py` and `lists.py`.\n`game.py` discovers shared declarations automatically. Restart to see changes.\nRun `itchy build` to export `dist/game.sb3` and a browser preview.\n\n[Learn to create games in the itchy book]({BOOK}).\n",
+        "assets/coin.svg": '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><circle cx="20" cy="20" r="16" fill="#fbbf24" stroke="#d97706" stroke-width="3"/></svg>\n',
         "assets/player.svg": '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><rect x="2" y="2" width="36" height="36" rx="8" fill="#8b5cf6"/></svg>\n',
     }
     for name, content in files.items():

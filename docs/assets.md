@@ -16,7 +16,7 @@ coin_costume = Costume(assets / "coin.png", center_x=20, center_y=20)
 
 `Costume` accepts inline SVG text or a `Path` to SVG, PNG, JPG, or JPEG. A string is interpreted as SVG content, so use `Path` for files. The current field is named `svg` even when its value is a raster-image path.
 
-Set rotation centers explicitly for images that are not 40×40. A sprite's `costume` is its initial image; `costumes=(...)` adds more images to the exported sprite. Runtime costume switching is not yet implemented.
+Set rotation centers explicitly for images that are not 40×40. A sprite's `costume` is its initial image; `costumes=(...)` adds more images to the exported sprite. Use `switch_costume(name)` or `next_costume()` to change costumes at runtime.
 
 The compiler reads bytes, hashes their content, embeds them once per matching asset filename, and writes references into each target's costumes. `.jpeg` becomes `.jpg` in the export.
 

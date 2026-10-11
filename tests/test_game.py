@@ -6,7 +6,7 @@ from zipfile import ZipFile
 import pytest
 from games.coin_runner import game, player_costume
 from itchy.compiler import compile_game
-from itchy.game import Game, NumberVariable, Sprite, action, go_to, move_x, on_start, repeat
+from itchy.game import Game, Num, Sprite, action, go_to, move_x, on_start, repeat
 from itchy.testing import Flag, Press, Release, Snapshot, Tick, simulate
 
 
@@ -25,7 +25,7 @@ def test_movement_scoring_release_restart() -> None:
 
 
 def test_nested_generated_actions() -> None:
-    points = NumberVariable("points", 7)
+    points = Num("points", 7)
 
     @action
     def stride(distance: float, count: int):
@@ -42,7 +42,7 @@ def test_nested_generated_actions() -> None:
 
 
 def test_undeclared_variable_is_rejected() -> None:
-    missing = NumberVariable("missing")
+    missing = Num("missing")
     bad = replace(game, sprites=(replace(game.sprites[0], scripts=(on_start(missing.set(1)),)),))
     with pytest.raises(ValueError, match="Undeclared variable"):
         compile_game(bad)
