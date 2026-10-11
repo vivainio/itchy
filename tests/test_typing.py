@@ -8,7 +8,7 @@ def test_ty_rejects_invalid_authored_game_types(tmp_path: Path) -> None:
     source.write_text('''from itchy.game import Key, NumberVariable, action, move_x, on_key, if_then, if_, on_start
 score = NumberVariable("score")
 score.add("five")
-on_key("right", move_x(10))
+on_key(123, move_x(10))
 @action
 def walk(distance: float):
     return move_x(distance)

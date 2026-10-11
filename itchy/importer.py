@@ -5,6 +5,8 @@ import ast
 import json
 import keyword
 from collections import Counter
+from collections.abc import Mapping
+from typing import Any
 from pathlib import Path, PurePosixPath
 import re
 import shutil
@@ -40,7 +42,7 @@ LITERAL_OPCODES = {
 }
 
 
-def _loads_json(data: bytes, source: Path) -> dict[str, object]:
+def _loads_json(data: bytes, source: Path) -> dict[str, Any]:
     try:
         project = json.loads(data)
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
@@ -77,7 +79,7 @@ def _python_attribute(value: str, fallback: str) -> str:
 
 
 class PythonImporter:
-    def __init__(self, source: Path, project: dict[str, object], archive: ZipFile, assets_dir: Path):
+    def __init__(self, source: Path, project: Mapping[str, Any], archive: ZipFile, assets_dir: Path):
         self.source = source
         self.project = project
         self.archive = archive
@@ -91,11 +93,11 @@ class PythonImporter:
         self.messages: dict[str, tuple[str, str]] = {}
         self.target_vars: dict[str, dict[str, str]] = {}
         self.target_lists: dict[str, dict[str, str]] = {}
-        self.procedures: dict[str, dict[str, dict[str, object]]] = {}
+        self.procedures: dict[str, dict[str, dict[str, Any]]] = {}
         self.procedure_symbols: dict[tuple[str, str], str] = {}
         self.argument_symbols: dict[tuple[str, str, str], str] = {}
         self.argument_names: dict[tuple[str, str, str], str] = {}
-        self.block_symbols: dict[tuple[str, str], dict[str, object]] = {}
+        self.block_symbols: dict[tuple[str, str], dict[str, Any]] = {}
         self.visited_blocks: set[tuple[str, str]] = set()
         self.emitted_command_blocks: set[tuple[str, str]] = set()
         self.unresolved_procedures: list[tuple[str, str]] = []
@@ -126,6 +128,10 @@ class PythonImporter:
             suffix += 1
         self.used_names.add(name)
         return name
+
+    def _procedure_name(self, proccode: str, fallback: str) -> str:
+        label = re.sub(r"%[bs]", " ", proccode)
+        return self._name(label, fallback, prefix="custom")
 
     def _prepare_declarations(self) -> None:
         for target_index, target in enumerate(self.targets):
@@ -181,7 +187,7 @@ class PythonImporter:
             if not isinstance(blocks, dict):
                 continue
             self.block_symbols[(target_key, "blocks")] = blocks
-            definitions: list[tuple[str, dict[str, object], dict[str, object]]] = []
+            definitions: list[tuple[str, dict[str, Any], dict[str, Any]]] = []
             for block_id, block in blocks.items():
                 if not isinstance(block, dict) or block.get("opcode") != "procedures_definition":
                     continue
@@ -209,7 +215,7 @@ class PythonImporter:
                     self.argument_symbols[(target_key, str(block_id), _string(arg_id))] = arg_symbol
                     self.argument_names[(target_key, str(block_id), arg_name)] = arg_symbol
                 self.used_names = project_names
-                proc_symbol = self._name(_string(proccode), f"procedure_{len(definitions) + 1}", prefix="custom")
+                proc_symbol = self._procedure_name(proccode, f"procedure_{len(definitions) + 1}")
                 self.procedure_symbols[(target_key, _string(block_id))] = proc_symbol
                 procedure = {
                     "symbol": proc_symbol, "block_id": _string(block_id), "prototype_id": _string(proto_id),
@@ -240,7 +246,7 @@ class PythonImporter:
                     self.argument_symbols[(target_key, synthetic_id, _string(arg_id))] = arg_symbol
 
                 procedure = {
-                    "symbol": self._name(proccode, f"procedure_{len(definitions) + 1}", prefix="custom"), "block_id": synthetic_id,
+                    "symbol": self._procedure_name(proccode, f"procedure_{len(definitions) + 1}"), "block_id": synthetic_id,
                     "prototype_id": "", "proccode": proccode, "argument_ids": ids,
                     "argument_names": [f"arg{i + 1}" for i in range(len(ids))],
                     "argument_defaults": [], "arguments": args, "warp": False, "body_id": None,
@@ -300,7 +306,7 @@ class PythonImporter:
             return self._target_symbol(target_key, item_id, kind="list")
         return repr(name)
 
-    def _menu(self, target_key: str, block: dict[str, object]) -> str:
+    def _menu(self, target_key: str, block: dict[str, Any]) -> str:
         fields = block.get("fields", {})
         if not isinstance(fields, dict) or not fields:
             return "Menu('unknown', 'unknown', '')"
@@ -358,7 +364,7 @@ class PythonImporter:
         return repr(payload)
 
     @staticmethod
-    def _is_menu(block: dict[str, object]) -> bool:
+    def _is_menu(block: dict[str, Any]) -> bool:
         opcode = _string(block.get("opcode"))
         return opcode in MENU_OPCODES or opcode.endswith("_menu") or opcode.endswith("_options")
 
@@ -505,10 +511,28 @@ class PythonImporter:
         if opcode == "operator_round":
             return f"round_number({inp('NUM')})"
         if opcode == "operator_mathop":
+            helpers = {
+                'abs': 'abs_number', 'floor': 'floor', 'ceiling': 'ceil',
+                'sqrt': 'sqrt', 'sin': 'sin', 'cos': 'cos', 'tan': 'tan',
+                'asin': 'asin', 'acos': 'acos', 'atan': 'atan',
+                'ln': 'ln', 'log': 'log10', 'e ^': 'exp', '10 ^': 'pow10',
+            }
+            helper = helpers.get(ast.literal_eval(field('OPERATOR')))
+            if helper:
+                return f"{helper}({inp('NUM')})"
             return f"math_op({field('OPERATOR')}, {inp('NUM')})"
         if opcode == "operator_mod":
             return f"modulo({inp('NUM1')}, {inp('NUM2')})"
         if opcode == "operator_join":
+            left = inp('STRING1')
+            expression = ast.parse(left, mode='eval').body
+            if (isinstance(expression, ast.Call)
+                    and isinstance(expression.func, ast.Name)
+                    and expression.func.id == 'join'
+                    and len(expression.args) >= 2
+                    and not expression.keywords):
+                parts = [ast.unparse(arg) for arg in expression.args]
+                return f"join({', '.join(parts)}, {inp('STRING2')})"
             return f"join({inp('STRING1')}, {inp('STRING2')})"
         if opcode == "operator_length":
             return f"length({inp('STRING')})"
@@ -865,7 +889,7 @@ class PythonImporter:
         self.lines.append(")")
         return "\n".join(self.lines) + "\n"
 
-    def _detached_stacks(self, target_key: str, blocks: dict[str, object]) -> list[str]:
+    def _detached_stacks(self, target_key: str, blocks: dict[str, Any]) -> list[str]:
         incoming: set[str] = set()
         for block_id, block in blocks.items():
             if not isinstance(block, dict):
@@ -900,7 +924,7 @@ class PythonImporter:
                 self.detached_stacks += 1
         return scripts
 
-    def _is_noncommand(self, block: dict[str, object]) -> bool:
+    def _is_noncommand(self, block: dict[str, Any]) -> bool:
         opcode = _string(block.get("opcode"))
         if opcode in BOOLEAN_OPCODES or self._is_menu(block):
             return True
@@ -919,7 +943,7 @@ class PythonImporter:
     def _tuple_expr(symbols: tuple[str, ...]) -> str:
         return "(" + ", ".join(symbols) + ("," if len(symbols) == 1 else "") + ")"
 
-    def _costumes(self, target: dict[str, object], target_index: int) -> tuple[str, ...]:
+    def _costumes(self, target: dict[str, Any], target_index: int) -> tuple[str, ...]:
         result: list[str] = []
         for costume_index, costume in enumerate(target.get("costumes", [])):
             if not isinstance(costume, dict):
@@ -934,7 +958,7 @@ class PythonImporter:
             result.append(symbol)
         return tuple(result)
 
-    def _sounds(self, target: dict[str, object], target_index: int) -> tuple[str, ...]:
+    def _sounds(self, target: dict[str, Any], target_index: int) -> tuple[str, ...]:
         result: list[str] = []
         for sound_index, sound in enumerate(target.get("sounds", [])):
             if not isinstance(sound, dict):
@@ -952,7 +976,7 @@ class PythonImporter:
             result.append(symbol)
         return tuple(result)
 
-    def _asset(self, descriptor: dict[str, object]) -> str:
+    def _asset(self, descriptor: dict[str, Any]) -> str:
         asset_name = _string(descriptor.get("md5ext", ""))
         safe_name = PurePosixPath(asset_name).name
         if not safe_name or safe_name != asset_name:

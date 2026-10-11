@@ -16,6 +16,15 @@ from itchy.testing import Flag, Snapshot, Tick, simulate
 COSTUME = Costume('<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><rect width="40" height="40"/></svg>')
 
 
+def test_variadic_join_preserves_binary_block_structure():
+    from dataclasses import asdict
+
+    value = StringVariable("value")
+    assert asdict(join(value, ";", 12, ";", "end")) == asdict(
+        join(join(join(join(value, ";"), 12), ";"), "end")
+    )
+
+
 def test_native_lists_strings_motion_and_procedures_in_vm():
     items = ScratchList("items", ("old",))
     text = StringVariable("text")
@@ -130,14 +139,14 @@ def test_procedure_decorator_preserves_custom_blocks_and_forward_calls():
 
 
 def test_procedure_decorator_supports_recursion_and_boolean_parameters():
-    from itchy.game import if_, procedure
+    from itchy.game import Condition, if_, procedure
 
     @procedure(warp=True)
     def recursive(distance):
         return if_(distance > 0).then(move(distance), recursive(distance - 1))
 
     @procedure()
-    def choose(enabled: bool):
+    def choose(enabled: Condition):
         return if_(enabled).then(move(5))
 
     game = Game('Recursive', (), (Sprite('Player', COSTUME, (

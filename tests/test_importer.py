@@ -6,6 +6,62 @@ from itchy.game import Arithmetic, Comparison
 from itchy.importer import PythonImporter
 
 
+def test_procedure_names_strip_placeholders_and_preserve_labels(tmp_path):
+    codes = ['Goto X: %s Y: %s Dir: %s From X: %s Y: %s',
+             'Goto X: %b Y: %s Dir: %s From X: %s Y: %s', '%s %b']
+    blocks = {
+        f'call{i}': {'opcode': 'procedures_call',
+                    'mutation': {'proccode': code, 'argumentids': '[]'}}
+        for i, code in enumerate(codes)
+    }
+    project = {'targets': [{'isStage': True, 'name': 'Stage', 'blocks': blocks}]}
+    with ZipFile(BytesIO(), 'w') as archive:
+        importer = PythonImporter(Path('test.sb3'), project, archive, tmp_path)
+        procedures = importer.procedures['Stage']
+        assert procedures[codes[0]]['symbol'] == 'custom_goto_x_y_dir_from_x_y'
+        assert procedures[codes[1]]['symbol'] == 'custom_goto_x_y_dir_from_x_y_2'
+        assert procedures[codes[2]]['symbol'] == 'custom_procedure_3'
+        assert [proc['proccode'] for proc in procedures.values()] == codes
+
+
+def test_importer_uses_named_math_helpers(tmp_path):
+    from dataclasses import asdict
+    import itchy.game as game
+
+    project = {'targets': [{'isStage': True, 'name': 'Stage', 'blocks': {}}]}
+    operations = {
+        'abs': 'abs_number', 'floor': 'floor', 'ceiling': 'ceil',
+        'sqrt': 'sqrt', 'sin': 'sin', 'cos': 'cos', 'tan': 'tan',
+        'asin': 'asin', 'acos': 'acos', 'atan': 'atan',
+        'ln': 'ln', 'log': 'log10', 'e ^': 'exp', '10 ^': 'pow10',
+    }
+    with ZipFile(BytesIO(), 'w') as archive:
+        importer = PythonImporter(Path('test.sb3'), project, archive, tmp_path)
+        for operation, helper in operations.items():
+            source = importer._semantic_block(
+                'operator_mathop', {'NUM': '12'}, {'OPERATOR': repr(operation)},
+                {}, 'Stage', as_command=False,
+            )
+            assert source == f'{helper}(12)'
+            assert asdict(eval(source, vars(game))) == asdict(game.math_op(operation, 12))
+        assert importer._semantic_block(
+            'operator_mathop', {'NUM': '12'}, {'OPERATOR': "'unknown'"},
+            {}, 'Stage', as_command=False,
+        ) == "math_op('unknown', 12)"
+
+
+def test_importer_flattens_left_join_chain(tmp_path):
+    project = {'targets': [{'isStage': True, 'name': 'Stage', 'blocks': {}}]}
+    with ZipFile(BytesIO(), 'w') as archive:
+        importer = PythonImporter(Path('test.sb3'), project, archive, tmp_path)
+        source = importer._semantic_block(
+            'operator_join', {'STRING1': "join(vars.x, ';', vars.y)",
+                              'STRING2': "join('a', 'b')"}, {}, {},
+            'Stage', as_command=False,
+        )
+        assert source == "join(vars.x, ';', vars.y, join('a', 'b'))"
+
+
 def test_imported_literals_use_python_values_and_variable_references(tmp_path):
     project = {'targets': [{'isStage': True, 'name': 'Stage',
                            'variables': {'speed': ['G.Spd', 1]}, 'lists': {},
@@ -22,6 +78,7 @@ def test_imported_literals_use_python_values_and_variable_references(tmp_path):
             ('operator_lt', {'OPERAND1': '2', 'OPERAND2': '3'}, Comparison),
         ):
             source = importer._semantic_block(opcode, inputs, {}, {}, 'Stage', as_command=False)
+            assert source is not None
             assert isinstance(eval(source, {'Arithmetic': Arithmetic, 'Comparison': Comparison}), expected)
 
 
@@ -37,6 +94,7 @@ def test_imported_arithmetic_uses_operators_with_text_variables(tmp_path):
         )
         assert source == '(100 / vars.zoom)'
         variables = SimpleNamespace(zoom=StringVariable('zoom', '10'))
+        assert source is not None
         expression = eval(source, {'vars': variables})
         assert isinstance(expression, Arithmetic)
         assert expression.left == 100
@@ -57,12 +115,14 @@ def test_importer_flattens_only_single_else_if_stack(tmp_path):
         source = importer._semantic_block('control_if_else', {'CONDITION': 'a'}, {},
                                          {'SUBSTACK': '(move_x(1),)', 'SUBSTACK2': single},
                                          'Stage', as_command=False)
+        assert source is not None
         assert '.elif_(b)' in source
         assert '.else_((move_x(3),))' in source
         multiple = '(if_(b).then((move_x(2),)), move_x(4))'
         source = importer._semantic_block('control_if_else', {'CONDITION': 'a'}, {},
                                          {'SUBSTACK': '(move_x(1),)', 'SUBSTACK2': multiple},
                                          'Stage', as_command=False)
+        assert source is not None
         assert '.elif_' not in source
 
 

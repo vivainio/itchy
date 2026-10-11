@@ -114,8 +114,8 @@ type Number = float | NumberExpression
 @dataclass(frozen=True, eq=False)
 class Arithmetic(NumberExpression):
     operator: Literal["add", "subtract", "multiply", "divide"]
-    left: Number
-    right: Number
+    left: Number | Condition
+    right: Number | Condition
 
 
 @dataclass(frozen=True, eq=False)
@@ -541,8 +541,8 @@ class StringVariable(NumberExpression):
     def add(self, value: Number) -> NativeCommand:
         return block("data_changevariableby", inputs={"VALUE": value}, fields={"VARIABLE": self})
 
-    def equals(self, value: Value) -> NativeCondition:
-        return predicate("operator_equals", inputs={"OPERAND1": self, "OPERAND2": value})
+    def equals(self, other: Value) -> NativeCondition:
+        return predicate("operator_equals", inputs={"OPERAND1": self, "OPERAND2": other})
 
     def show(self) -> NativeCommand:
         return block("data_showvariable", fields={"VARIABLE": self})
@@ -730,8 +730,12 @@ def on_clone(*steps: Steps) -> Script:
     return on_event(block("control_start_as_clone"), *steps)
 
 
-def join(left: Value, right: Value) -> NativeReporter:
-    return reporter("operator_join", inputs={"STRING1": left, "STRING2": right})
+def join(left: Value, right: Value, *parts: Value) -> NativeReporter:
+    """Concatenate values using left-nested Scratch join blocks."""
+    result = reporter("operator_join", inputs={"STRING1": left, "STRING2": right})
+    for part in parts:
+        result = reporter("operator_join", inputs={"STRING1": result, "STRING2": part})
+    return result
 
 
 def letter(index: Value, text: Value) -> NativeReporter:
@@ -846,6 +850,68 @@ def round_number(value: Number) -> NativeReporter:
 
 def math_op(operation: str, value: Number) -> NativeReporter:
     return reporter("operator_mathop", inputs={"NUM": value}, fields={"OPERATOR": operation})
+
+
+def abs_number(value: Number) -> NativeReporter:
+    return math_op('abs', value)
+
+
+def floor(value: Number) -> NativeReporter:
+    return math_op('floor', value)
+
+
+def ceil(value: Number) -> NativeReporter:
+    return math_op('ceiling', value)
+
+
+def sqrt(value: Number) -> NativeReporter:
+    return math_op('sqrt', value)
+
+
+def sin(value: Number) -> NativeReporter:
+    """Scratch sin; angles are in degrees."""
+    return math_op('sin', value)
+
+
+def cos(value: Number) -> NativeReporter:
+    """Scratch cos; angles are in degrees."""
+    return math_op('cos', value)
+
+
+def tan(value: Number) -> NativeReporter:
+    """Scratch tan; angles are in degrees."""
+    return math_op('tan', value)
+
+
+def asin(value: Number) -> NativeReporter:
+    """Scratch asin; angles are in degrees."""
+    return math_op('asin', value)
+
+
+def acos(value: Number) -> NativeReporter:
+    """Scratch acos; angles are in degrees."""
+    return math_op('acos', value)
+
+
+def atan(value: Number) -> NativeReporter:
+    """Scratch atan; angles are in degrees."""
+    return math_op('atan', value)
+
+
+def ln(value: Number) -> NativeReporter:
+    return math_op('ln', value)
+
+
+def log10(value: Number) -> NativeReporter:
+    return math_op('log', value)
+
+
+def exp(value: Number) -> NativeReporter:
+    return math_op('e ^', value)
+
+
+def pow10(value: Number) -> NativeReporter:
+    return math_op('10 ^', value)
 
 
 def stamp() -> NativeCommand:

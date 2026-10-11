@@ -67,7 +67,9 @@ Costumes retain the names `Default`, `Costume 2`, `Costume 3`, etc. To author st
 
 ## Runtime strings and lists
 
-Declare `StringVariable(name, initial="")` in `Game.variables`. Its `.set(value)` accepts text, numeric reporters, and string reporters; `.equals(value)` creates a condition. `join(left, right)`, `letter(index, text)` (one-based), `length(text)`, and `contains(text, part)` run in Scratch.
+Declare `StringVariable(name, initial="")` in `Game.variables`. Its `.set(value)` accepts text, numeric reporters, and string reporters; `.equals(value)` creates a condition. `join(left, right, *parts)` (concatenates two or more values), `letter(index, text)` (one-based), `length(text)`, and `contains(text, part)` run in Scratch.
+
+Math reporters have named helpers: `abs_number`, `floor`, `ceil`, `sqrt`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `ln`, `log10`, `exp`, and `pow10`. Each takes one value. Trigonometric helpers use degrees, matching Scratch. `math_op(operation, value)` remains available for generic operations.
 
 Declare `ScratchList(name, initial=())` in `Game.lists`. Methods are `.append(value)`, `.delete(index)`, `.clear()`, `.insert(index, value)`, `.replace(index, value)`, `.item(index)`, `.length()`, `.index(value)`, and `.contains(value)`. Indices follow Scratch's one-based indexing and special index strings. Using the list itself as a native input reports its contents.
 

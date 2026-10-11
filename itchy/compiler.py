@@ -223,7 +223,7 @@ def compile_game(game: Game) -> bytes:
                 )
             return result
 
-        def numeric(value: Number, parent: str) -> list[Json]:
+        def numeric(value: Number | Condition, parent: str) -> list[Json]:
             if isinstance(value, str):
                 return [1, [10, value]]
             if isinstance(value, (NativeReporter, Argument, StringVariable, ScratchList)):
@@ -440,7 +440,7 @@ def compile_game(game: Game) -> bytes:
                     stage[key] = target[key]
         else:
             targets.append(target)
-    project: dict[str, Json] = {
+    project: dict[str, object] = {
         "targets": targets, "monitors": list(game.monitors), "extensions": list(game.extensions),
         "meta": game.meta or {"semver": "3.0.0", "vm": "0.2.0", "agent": "itchy"},
     }
