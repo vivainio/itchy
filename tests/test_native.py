@@ -99,3 +99,51 @@ def test_native_string_and_boolean_procedure_arguments():
     ), procedures=(proc,)),))
     state = simulate(game, Flag(), Tick(20), Snapshot(variables=("text",)))[0]
     assert state["variables"]["text"] == "hello!"
+
+
+def test_procedure_decorator_preserves_custom_blocks_and_forward_calls():
+    from itchy.game import procedure
+
+    @procedure(warp=True, proccode='walk %s', argument_names=('Distance',),
+               argument_ids=('distance-id',), argument_defaults=('10',))
+    def walk(distance):
+        return advance(distance)
+
+    @procedure()
+    def advance(distance):
+        return move(distance)
+
+    game = Game('Decorated', (), (Sprite('Player', COSTUME, (
+        on_start(point_direction(90), walk(12)),
+    ), procedures=(walk, advance)),))
+    state = simulate(game, Flag(), Tick(10), Snapshot(('Player',)))[0]
+    assert state['sprites']['Player']['x'] == 12
+    assert walk.arguments[0].name == 'Distance'
+    with ZipFile(BytesIO(compile_game(game))) as archive:
+        project = json.loads(archive.read('project.json'))
+    blocks = project['targets'][1]['blocks'].values()
+    prototype = next(block for block in blocks if block['opcode'] == 'procedures_prototype'
+                     and block['mutation']['proccode'] == 'walk %s')
+    assert prototype['mutation']['warp'] == 'true'
+    assert json.loads(prototype['mutation']['argumentids']) == ['distance-id']
+    assert json.loads(prototype['mutation']['argumentdefaults']) == ['10']
+
+
+def test_procedure_decorator_supports_recursion_and_boolean_parameters():
+    from itchy.game import if_, procedure
+
+    @procedure(warp=True)
+    def recursive(distance):
+        return if_(distance > 0).then(move(distance), recursive(distance - 1))
+
+    @procedure()
+    def choose(enabled: bool):
+        return if_(enabled).then(move(5))
+
+    game = Game('Recursive', (), (Sprite('Player', COSTUME, (
+        on_start(point_direction(90), recursive(3), choose(reporter('operator_equals',
+            inputs={'OPERAND1': 1, 'OPERAND2': 1}))),
+    ), procedures=(recursive, choose)),))
+    state = simulate(game, Flag(), Tick(30), Snapshot(('Player',)))[0]
+    assert state['sprites']['Player']['x'] == 11
+    assert choose.arguments[0].boolean

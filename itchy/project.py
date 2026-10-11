@@ -77,11 +77,16 @@ def project_config(directory: Path) -> tuple[Path, Path]:
 def project_context(directory: Path) -> Generator[None]:
     previous = Path.cwd()
     previous_path = sys.path.copy()
+    local_names = {path.stem for path in directory.glob('*.py')}
+    previous_modules = {name: sys.modules.pop(name) for name in local_names if name in sys.modules}
     os.chdir(directory)
     sys.path.insert(0, str(directory))
     try:
         yield
     finally:
+        for name in local_names:
+            sys.modules.pop(name, None)
+        sys.modules.update(previous_modules)
         os.chdir(previous)
         sys.path[:] = previous_path
 

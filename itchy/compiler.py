@@ -224,7 +224,9 @@ def compile_game(game: Game) -> bytes:
             return result
 
         def numeric(value: Number, parent: str) -> list[Json]:
-            if isinstance(value, (NativeReporter, Argument)):
+            if isinstance(value, str):
+                return [1, [10, value]]
+            if isinstance(value, (NativeReporter, Argument, StringVariable, ScratchList)):
                 return value_input(value, parent)
             if isinstance(value, NativeCondition):
                 return value_input(value, parent)
@@ -318,7 +320,10 @@ def compile_game(game: Game) -> bytes:
                             raise ValueError(f"Wrong argument count: {proc.name}")
                         block_id = add("procedures_call", owner)
                         blocks[block_id].mutation = procedure_mutation(proc)
-                        blocks[block_id].inputs = {f"arg:{i}": value_input(value, block_id) for i, value in enumerate(values)}
+                        blocks[block_id].inputs = {
+                            (proc.argument_ids[i] if proc.argument_ids else f"arg:{i}"): value_input(value, block_id)
+                            for i, value in enumerate(values)
+                        }
                     case GoTo(x, y):
                         block_id = add("motion_gotoxy", owner)
                         blocks[block_id].inputs = {"X": numeric(x, block_id), "Y": numeric(y, block_id)}
@@ -375,6 +380,7 @@ def compile_game(game: Game) -> bytes:
             return first
 
         for proc in sprite.procedures:
+            proc.build()
             if len({arg.name for arg in proc.arguments}) != len(proc.arguments):
                 raise ValueError("Procedure argument names must be unique")
             hat = add("procedures_definition", None, top_level=True)
@@ -386,7 +392,7 @@ def compile_game(game: Game) -> bytes:
                 node = add("argument_reporter_boolean" if arg.boolean else "argument_reporter_string_number",
                            prototype, fields={"VALUE": [arg.name, None]})
                 blocks[node].shadow = True
-                blocks[prototype].inputs[f"arg:{i}"] = [1, node]
+                blocks[prototype].inputs[proc.argument_ids[i] if proc.argument_ids else f"arg:{i}"] = [1, node]
             active_procedure = proc
             blocks[hat].next = sequence(proc.body, hat)
             active_procedure = None

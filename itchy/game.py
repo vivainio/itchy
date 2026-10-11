@@ -3,6 +3,8 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
+import inspect
+import re
 from pathlib import Path
 from typing import Literal, assert_never
 
@@ -228,10 +230,34 @@ class If:
     condition: Condition
     then: tuple[Command, ...]
     otherwise: tuple[Command, ...] | None = None
+    _elif_chain: bool = False
 
     def else_(self, *steps: Steps) -> If:
         """Return a complete two-branch command without mutating this branch."""
+        if self._elif_chain:
+            assert self.otherwise is not None and isinstance(self.otherwise[0], If)
+            return If(self.condition, self.then, (self.otherwise[0].else_(*steps),), True)
         return If(self.condition, self.then, flatten(steps))
+
+    def elif_(self, condition: Condition) -> ElifBuilder:
+        return ElifBuilder(self, condition)
+
+    def _append_elif(self, branch: If) -> If:
+        if self._elif_chain:
+            assert self.otherwise is not None and isinstance(self.otherwise[0], If)
+            return If(self.condition, self.then, (self.otherwise[0]._append_elif(branch),), True)
+        if self.otherwise is not None:
+            raise ValueError("elif_ must precede else_")
+        return If(self.condition, self.then, (branch,), True)
+
+
+@dataclass(frozen=True)
+class ElifBuilder:
+    root: If
+    condition: Condition
+
+    def then(self, *steps: Steps) -> If:
+        return self.root._append_elif(If(self.condition, flatten(steps)))
 
 
 @dataclass(frozen=True)
@@ -504,7 +530,7 @@ def on_event(event: NativeCommand, *steps: Steps) -> Script:
 
 
 @dataclass(eq=False)
-class StringVariable:
+class StringVariable(NumberExpression):
     name: str
     initial: str = ""
     id: str | None = None
@@ -581,6 +607,13 @@ class Procedure:
     proccode: str | None = None
     argument_ids: tuple[str, ...] = ()
     argument_defaults: tuple[object, ...] = ()
+    _generate: Callable[..., Steps] | None = None
+
+    def build(self) -> None:
+        if self._generate is not None:
+            body = flatten((self._generate(*self.arguments),))
+            self.body = body
+            self._generate = None
 
     def __call__(self, *values: Value) -> ProcedureCall:
         if len(values) != len(self.arguments):
@@ -592,6 +625,37 @@ class Procedure:
 class ProcedureCall:
     procedure: Procedure
     values: tuple[Value, ...]
+
+
+def procedure(*, warp: bool = False, name: str | None = None,
+              proccode: str | None = None, argument_names: tuple[str, ...] = (),
+              argument_ids: tuple[str, ...] = (),
+              argument_defaults: tuple[object, ...] = ()) -> Callable[[Callable[..., Steps]], Procedure]:
+    """Define a Scratch custom block; build its body lazily to allow recursive calls."""
+    def decorate(generate: Callable[..., Steps]) -> Procedure:
+        parameters = tuple(inspect.signature(generate).parameters.values())
+        if any(parameter.kind not in (inspect.Parameter.POSITIONAL_ONLY,
+                                      inspect.Parameter.POSITIONAL_OR_KEYWORD)
+               for parameter in parameters):
+            raise TypeError("Procedure parameters must be positional")
+        if argument_names and len(argument_names) != len(parameters):
+            raise ValueError("argument_names must match the function parameters")
+        slots = re.findall(r"%[bs]", proccode) if proccode is not None else []
+        arguments = tuple(
+            Argument(argument_names[index] if argument_names else parameter.name,
+                     boolean=(slots[index] == '%b' if index < len(slots)
+                              else parameter.annotation in (bool, 'bool', Condition, 'Condition')))
+            for index, parameter in enumerate(parameters)
+        )
+        defaults = argument_defaults or tuple(
+            parameter.default if parameter.default is not inspect.Parameter.empty
+            else False if argument.boolean else ''
+            for parameter, argument in zip(parameters, arguments)
+        )
+        return Procedure(name or getattr(generate, '__name__', 'procedure'), arguments, warp=warp,
+                         proccode=proccode, argument_ids=argument_ids,
+                         argument_defaults=defaults, _generate=generate)
+    return decorate
 
 
 def move(steps: Number) -> NativeCommand:

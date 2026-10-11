@@ -80,6 +80,18 @@ script = on_start(words.append("world"), text.set(join(words.item(1), "!")))
 
 ## Native My Blocks
 
+Use `@procedure(warp=True)` to define a custom block with function-scoped parameters:
+
+```python
+@procedure(warp=True)
+def walk(distance):
+    return move(distance)
+
+player = Sprite("Player", costume, (on_start(walk(20)),), procedures=(walk,))
+```
+
+The compiler builds the function body once with argument reporters. Calls remain native Scratch custom-block calls. Bodies can call procedures declared later or call themselves recursively. Annotate Boolean parameters with `bool`. Parameters must be positional. Imports also retain the original `proccode`, argument names, IDs, and defaults in decorator options.
+
 `Procedure(name, arguments=(), body=(), warp=False)` defines a native Scratch custom block. Declare it in `Sprite.procedures`. Calling the procedure returns a command with checked argument count. Arguments belong to their procedure and cannot be used in unrelated scripts.
 
 ```python

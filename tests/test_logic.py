@@ -66,3 +66,20 @@ def test_reporter_references_are_validated() -> None:
     )),))
     with pytest.raises(ValueError, match="Unknown touching target"):
         compile_game(bad)
+
+
+@pytest.mark.parametrize('value, expected', [(0, 10), (1, 20), (2, 30), (3, 40)])
+def test_elif_chain_selects_one_branch(value, expected):
+    count = NumberVariable('count', value)
+    result = NumberVariable('result')
+    first = if_(count.equals(0)).then(result.set(10))
+    chain = (first.elif_(count.equals(1)).then(result.set(20))
+             .elif_(count.equals(2)).then(result.set(30))
+             .else_(result.set(40)))
+    assert first.otherwise is None
+    game = Game('Branches', (count, result), (Sprite('Player', player_costume, (
+        on_start(chain),
+    )),))
+    compile_game(game)
+    state = simulate(game, Flag(), Tick(10), Snapshot((), ('result',)))[0]
+    assert float(state['variables']['result']) == expected
