@@ -34,6 +34,10 @@ itchy build
 
 The export is `dist/game.sb3`; `dist/preview/` and `dist/itchy-preview.zip` contain a browser player with its runtime. Open Scratch and select **File → Load from your computer** to import the `.sb3`. Website import has not been checked automatically.
 
+## Share your game
+
+Put your project on GitHub to share its Python source and assets. Other people can clone it, run `itchy run`, and fork it to make their own version. You can also share the `.sb3` and preview ZIP as GitHub release downloads. See [Sharing on GitHub](build.md#share-your-game-on-github).
+
 ## Upgrade
 
 ```sh

@@ -29,6 +29,12 @@ watch_for_player = forever(
 
 These are Python values describing runtime behavior. Scratch executes the generated blocks. [Named block sequences](sequences.md) explains how to compose ordinary lists; [Logic and expressions](logic.md) covers conditions and reporters.
 
+## Share your games on GitHub
+
+An itchy game is a Python project you can share on GitHub. Commit your game code, costumes, sounds, and configuration so other people can clone it and play with `itchy run`. They can also fork the project, change the game, and contribute improvements through pull requests. Git records the history of your game, and readable Python makes changes easy to review.
+
+For people who just want to play, attach the exported `.sb3` and browser preview ZIP to a GitHub release. See [Sharing on GitHub](build.md#share-your-game-on-github) for the workflow.
+
 ## Learn through examples
 
 The repository includes a movement/scoring sandbox and a collectible game with a PNG costume, WAV sound, collision detection, and message-ordered initialization. [Scratch recreations](scratch-examples.md) relates publicly shared Scratch projects to readable Python implementations, documenting which behavior is translated and which is adapted.

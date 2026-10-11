@@ -28,6 +28,39 @@ python3 -m http.server 4400 --bind 127.0.0.1
 
 Open `http://127.0.0.1:4400/`. The built bundle includes its player runtime. Opening `index.html` directly as a local file is not supported because the player fetches its project files.
 
+## Share your game on GitHub
+
+Your game can live in its own GitHub repository. Share `game.py`, any helper modules, `assets/`, `itchy.toml`, `pyproject.toml`, and a README that explains the controls. The `.gitignore` created by `itchy init` keeps generated builds and local environments out of Git.
+
+From your game directory, create the first commit:
+
+```sh
+git init
+git add .
+git commit -m "Create my itchy game"
+```
+
+Create an empty repository on GitHub, then use its URL below in place of `YOUR-NAME/my-game`:
+
+```sh
+git branch -M main
+git remote add origin https://github.com/YOUR-NAME/my-game.git
+git push -u origin main
+```
+
+Include these instructions in your project's README so others can play:
+
+```sh
+uv tool install itchy
+git clone https://github.com/YOUR-NAME/my-game.git
+cd my-game
+itchy run
+```
+
+GitHub gives your game version history, issues for feedback, and pull requests for collaboration. Other people can fork the repository to remix your game while keeping its source and assets together.
+
+To share a playable version without requiring people to build the source, run `itchy build` and attach `dist/game.sb3` and `dist/itchy-preview.zip` to a GitHub release. Players can load the `.sb3` in Scratch or follow [the static-bundle instructions](#run-the-static-bundle) to run the browser preview. These downloads are separate from the source files tracked in Git.
+
 ## Add examples and rebuild
 
 Edit your project entry file (default `game.py`) and run `itchy build` again. Change `project.entry` and `project.output` in `itchy.toml` to customize the source and output paths.
