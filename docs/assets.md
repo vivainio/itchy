@@ -4,6 +4,8 @@ The `.sb3` is a ZIP containing `project.json` and content-addressed asset files.
 
 ## Costumes
 
+The samples keep images in `games/assets/`: `player.svg` supplies the player and Hide and Seek target, and `coin.png` supplies the collectible. The build embeds these files into each exported project.
+
 ```python
 from pathlib import Path
 from itchy.game import Costume

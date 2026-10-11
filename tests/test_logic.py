@@ -5,7 +5,7 @@ from games.coin_runner import player_costume
 from itchy.compiler import compile_game
 from itchy.game import (
     Condition, Game, Key, NumberVariable, Sprite, forever, go_to,
-    if_else, if_then, key_down, move_x, on_start, repeat_until, touching,
+    if_, if_else, if_then, key_down, move_x, on_start, repeat_until, touching,
 )
 from itchy.testing import Flag, Press, Release, Snapshot, Tick, simulate
 
@@ -17,11 +17,11 @@ def test_arithmetic_branching_and_repeat_until() -> None:
         on_start(
             count.reset(), result.reset(),
             repeat_until(count >= 3, count.add(1)),
-            if_else((count.equals(3) & ~(count < 0)) | (count > 10),
-                    then=result.set((count * 4 + 6) / 2 - 1),
-                    otherwise=result.set(-100)),
+            if_((count.equals(3) & ~(count < 0)) | (count > 10))
+                .then([result.set((count * 4 + 6) / 2 - 1)])
+                .else_([result.set(-100)]),
             if_then(count <= 3, move_x(result)),
-            if_else(count < 0, then=result.set(-200), otherwise=result.add(2)),
+            if_(count < 0).then(result.set(-200)).else_(result.add(2)),
             if_then(count > 100, result.set(-300)),
         ),
     )),))

@@ -19,7 +19,7 @@ collect_coin: list[Command] = [
 ]
 
 watch_for_player = forever(
-    if_then(collected.equals(0) & touching(player), collect_coin),
+    if_(collected.equals(0) & touching(player)).then(collect_coin),
 )
 ```
 

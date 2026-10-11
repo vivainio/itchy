@@ -1,15 +1,13 @@
+from pathlib import Path
+
 from itchy.game import (
     Costume, Game, Key, NumberVariable, Sprite, action, go_to,
     horizontal_controls, on_key, on_start,
 )
 
 score = NumberVariable("score", initial=0)
-player_costume = Costume(
-    '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40">'
-    '<rect x="2" y="2" width="36" height="36" rx="10" fill="#7c3aed"/>'
-    '<circle cx="14" cy="15" r="3" fill="white"/>'
-    '<circle cx="26" cy="15" r="3" fill="white"/></svg>'
-)
+assets = Path(__file__).parent / "assets"
+player_costume = Costume(assets / "player.svg")
 
 
 @action

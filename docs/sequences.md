@@ -3,7 +3,7 @@
 A sequence can be an ordinary Python list. Give it a name that describes its purpose, then pass it directly to a script or control block.
 
 ```python
-from itchy.game import Command, go_to, hide, if_then, on_start
+from itchy.game import Command, go_to, hide, if_, on_start
 
 reset_player: list[Command] = [
     go_to(0, 0),
@@ -16,10 +16,22 @@ collect_coin: list[Command] = [
 ]
 
 on_start(reset_player)
-if_then(touching(player), collect_coin)
+if_(touching(player)).then(collect_coin)
 ```
 
 The snippets assume the variables and sprite references from the enclosing game. There is no sequence-specific wrapper or syntax.
+
+## Name both branches
+
+```python
+decide_turn = (
+    if_(health > 0)
+    .then(move_right)
+    .else_(reset_player)
+)
+```
+
+Both branch bodies can be named Python lists. The underscore in `if_` and `else_` avoids Python keywords; `.then(...)` makes the conditional command complete.
 
 ## Compose lists
 

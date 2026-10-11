@@ -3,16 +3,18 @@
 Numeric expressions and conditions are separate types. ty rejects using `score > 0` as a movement distance or `score + 1` as an `if_then` condition.
 
 ```python
-from itchy.game import if_else, if_then, repeat_until
+from itchy.game import if_, repeat_until
 
 repeat_until(score >= 3, score.add(1))
 
-if_else(
-    score.equals(3),
-    then=[move_x(score * 4), score.add(1)],
-    otherwise=score.reset(),
+decision = (
+    if_(score.equals(3))
+    .then([move_x(score * 4), score.add(1)])
+    .else_([score.reset()])
 )
 ```
+
+Branch bodies accept ordinary lists, nested lists, or individual commands. `if_(...).then(...)` is a complete command without an else branch; `if_(...)` alone is an incomplete builder and ty rejects it in a script. The older `if_then` and `if_else` functions remain available.
 
 ## Numeric reporters
 
@@ -23,10 +25,7 @@ Comparisons `<`, `>`, `<=`, and `>=` generate conditions. Use `.equals(value)` f
 ## Boolean composition
 
 ```python
-if_then(
-    key_down(Key.SPACE) & (health > 0),
-    award_points(1),
-)
+if_(key_down(Key.SPACE) & (health > 0)).then(award_points(1))
 ```
 
 Use `&`, `|`, and `~` for AND, OR, and NOT. Parenthesize comparisons when composing them. Python `and`, `or`, `not`, `if`, and `while` evaluate at build time; conditions raise an error if coerced to a Python boolean. Avoid Python chained comparisons such as `0 < score < 10`; write `(score > 0) & (score < 10)`.
@@ -39,6 +38,8 @@ Use `&`, `|`, and `~` for AND, OR, and NOT. Parenthesize comparisons when compos
 
 | Builder | Scratch behavior |
 | --- | --- |
+| `if_(condition).then(steps).else_(other_steps)` | Select a branch using the fluent API |
+| `if_(condition).then(steps)` | Run a single conditional branch |
 | `if_then(condition, *steps)` | Run the body when true |
 | `if_else(condition, then=steps, otherwise=steps)` | Select a branch |
 | `repeat(count, *steps)` | Repeat a literal number of times |

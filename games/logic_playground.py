@@ -1,13 +1,13 @@
 """A real collectible: collision detection, score, hiding, and restart."""
 from pathlib import Path
 
-from games.coin_runner import player_costume
 from itchy.game import (
     Command, Costume, Game, Message, broadcast, on_message, NumberVariable, Sound, Sprite, play_sound, forever, go_to, hide,
-    horizontal_controls, if_then, on_start, show, touching,
+    horizontal_controls, if_, on_start, show, touching,
 )
 
 assets = Path(__file__).parent / "assets"
+player_costume = Costume(assets / "player.svg")
 collect_sound = Sound("Collect", assets / "collect.wav")
 score = NumberVariable("score")
 collected = NumberVariable("collected")
@@ -21,7 +21,7 @@ player = Sprite("Player", player_costume, (
     *horizontal_controls(step=10),
 ))
 watch_for_player = forever(
-    if_then(collected.equals(0) & touching(player), collect_coin),
+    if_(collected.equals(0) & touching(player)).then(collect_coin),
 )
 coin = Sprite("Coin", Costume(assets / "coin.png"), (
     on_message(ready, prepare_coin, watch_for_player),

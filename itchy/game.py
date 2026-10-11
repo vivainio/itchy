@@ -32,7 +32,7 @@ class Condition:
         return Not(self)
 
     def __bool__(self) -> bool:
-        raise TypeError("Game conditions need if_then/if_else, &/|/~; Python if/and/or runs at build time")
+        raise TypeError("Game conditions need if_ builders and &/|/~; Python if/and/or runs at build time")
 
 
 class NumberExpression:
@@ -194,6 +194,22 @@ class If:
     condition: Condition
     then: tuple[Command, ...]
     otherwise: tuple[Command, ...] | None = None
+
+    def else_(self, *steps: Steps) -> If:
+        """Return a complete two-branch command without mutating this branch."""
+        return If(self.condition, self.then, flatten(steps))
+
+
+@dataclass(frozen=True)
+class IfBuilder:
+    condition: Condition
+
+    def then(self, *steps: Steps) -> If:
+        return If(self.condition, flatten(steps))
+
+
+def if_(condition: Condition) -> IfBuilder:
+    return IfBuilder(condition)
 
 
 @dataclass(frozen=True)

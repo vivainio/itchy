@@ -4,14 +4,15 @@
 # Original artwork/sound replaced; instruction bubble omitted.
 from pathlib import Path
 
-from games.coin_runner import player_costume
 from itchy.game import (
-    Command, Game, NumberVariable, Sound, Sprite, forever, go_to, hide,
+    Command, Costume, Game, NumberVariable, Sound, Sprite, forever, go_to, hide,
     on_click, on_start, play_sound, random_number, show, wait,
 )
 
+assets = Path(__file__).parent / "assets"
+player_costume = Costume(assets / "player.svg")
 score = NumberVariable("score")
-chime = Sound("Found", Path(__file__).parent / "assets/collect.wav")
+chime = Sound("Found", assets / "collect.wav")
 
 reset_round: list[Command] = [score.reset(), go_to(0, 0), show()]
 relocate = go_to(random_number(-200, 200), random_number(-140, 140))
