@@ -3,10 +3,14 @@
 itchy lets you describe games in typed Python, compile those descriptions into Scratch blocks, and export ordinary `.sb3` projects. The exported games contain their costumes and sounds and remain editable in Scratch.
 
 ```sh
-uv run itchy run
+uv tool install itchy
+mkdir my-game
+cd my-game
+itchy init
+itchy run
 ```
 
-That command prepares the local JavaScript runtime, builds the example projects, starts a player, and opens your browser. Start with [Getting started](getting-started.md).
+That command prepares the local JavaScript runtime, builds your game, starts a player, and opens your browser. Start with [Getting started](getting-started.md).
 
 ## Write sequences you can read
 
@@ -31,6 +35,6 @@ The repository includes a movement/scoring sandbox and a collectible game with a
 
 ## Current scope
 
-This is an early source-checkout tool. The CLI builds the repository's registered examples; it does not yet discover arbitrary game modules. There is no general Scratch-to-Python importer. `@action` expands ordinary blocks rather than producing native Scratch “My Blocks” definitions. Python installation and generation are separate from the JavaScript runtime used for testing and preview.
+Install itchy as a tool and use `itchy init` to create a project. The CLI loads the `game` declared in your project entry file. There is no general Scratch-to-Python importer. `@action` expands ordinary blocks rather than producing native Scratch “My Blocks” definitions. Python installation and generation are separate from the JavaScript runtime used for testing and preview.
 
-The [API reference](api.md) lists supported operations. The [testing guide](testing.md) distinguishes headless VM tests from browser tests. No PyPI release has been published.
+The [API reference](api.md) lists supported operations. The [testing guide](testing.md) distinguishes headless VM tests from browser tests. See [Getting started](getting-started.md) for installation.

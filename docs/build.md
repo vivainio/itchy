@@ -1,10 +1,10 @@
 # Build and export
 
 ```sh
-uv run itchy build
+itchy build
 ```
 
-The command builds all entries in `itchy/build.py:EXAMPLES`, packages their assets, copies the browser runtime, bundles audio support, builds this book, and produces Python distributions. The following are generated under `dist/`:
+The command loads the game configured in `itchy.toml`, packages its assets, copies the browser runtime, and bundles audio support. In an itchy development checkout without project configuration, it builds the repository examples, book, and Python distributions. The following are generated under `dist/`:
 
 | Output | Purpose |
 | --- | --- |
@@ -30,10 +30,10 @@ Open `http://127.0.0.1:4400/`. The built bundle includes its player runtime. Ope
 
 ## Add examples and rebuild
 
-The build currently uses an explicit example registry rather than arbitrary module discovery. Add a project to `EXAMPLES` and update menu/server routes as described in [Game structure](game-structure.md).
+Edit your project entry file (default `game.py`) and run `itchy build` again. Change `project.entry` and `project.output` in `itchy.toml` to customize the source and output paths.
 
 The `.sb3` ZIP uses stable asset hashes, ordered entries, and fixed timestamps. Identical authored input produces identical project bytes. Python package and preview ZIP metadata are not promised to be byte-for-byte deterministic.
 
 ## Scratch compatibility
 
-Exports use standard Scratch opcodes and no custom extensions. Website import is a separate account workflow and has not been automatically verified. Editing blocks in Scratch does not update the Python source.
+Exports use standard Scratch opcodes; projects can also declare supported runtime extensions. Website import is a separate account workflow and has not been automatically verified. Editing blocks in Scratch does not update the Python source.

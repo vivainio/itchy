@@ -1,9 +1,11 @@
 # Testing
 
+The CLI checks below are for developing itchy itself. Clone the repository, run `uv sync`, and activate `.venv` (`source .venv/bin/activate`) before running them.
+
 ```sh
-uv run itchy check
-uv run itchy test
-uv run itchy test --browser
+itchy check
+itchy test
+itchy test --browser
 ```
 
 ## Typed VM scenarios
@@ -32,7 +34,7 @@ VM tests cover movement, restart, arithmetic, branching, key states, nested repe
 Playwright checks actual keyboard input, rendering, PNG loading, WAV decoding, collision collection, hiding/showing, restart, and downloadable exports. The static mode uses the built preview instead of the development server:
 
 ```sh
-uv run itchy test --preview
+itchy test --preview
 ```
 
 This command builds the preview and prepares Chromium before testing.

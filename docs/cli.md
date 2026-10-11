@@ -1,23 +1,28 @@
 # CLI reference
 
-Run commands from the source checkout through uv:
+Install with `uv tool install itchy`, then run commands directly:
 
 ```sh
-uv run itchy --help
+itchy --help
+itchy init
+itchy run
 ```
 
 | Command | Effect |
 | --- | --- |
-| `itchy run` | Set up runtime, build examples, serve player, open browser |
+| `itchy init [directory]` | Create a starter game in an empty directory (current directory by default) |
+| `itchy run` | Set up runtime, build your game, serve the player, open a browser |
 | `itchy run --no-open` | Serve without opening a browser |
 | `itchy run --port 4400` | Use another local port |
-| `itchy setup` | Prepare local runtime tooling and synchronize dependencies |
-| `itchy build` | Generate exports, preview ZIP, and Python distributions |
-| `itchy check` | Run ty on the project |
-| `itchy test` | Run pytest, including actual Scratch VM scenarios |
-| `itchy test --preview` | Also build and verify the static preview |
-| `itchy test --browser` | Also install Chromium and run Playwright checks |
+| `itchy setup` | Prepare cached runtime tooling and synchronize dependencies |
+| `itchy build` | Generate `dist/game.sb3`, a browser preview, and a preview ZIP |
+| `itchy check` | Run ty in an itchy development checkout |
+| `itchy test` | Run pytest in an itchy development checkout |
+| `itchy test --preview` | Also build and verify the checkout's static preview |
+| `itchy test --browser` | Also install Chromium and run checkout browser checks |
 
-`run` binds only to `127.0.0.1`. Ctrl+C stops it. Missing runtime packages are installed automatically; `setup` forces a lockfile-based dependency installation. 
+`run` and `build` read `itchy.toml` in the current directory. `[project]` configures `entry` (default `game.py`) and `output` (default `dist`). The entry file must define a `Game` named `game`.
 
-The CLI is currently tied to the checkout's `games/`, `runner/`, and `web/` directories. Installing the generated core-library wheel alone is not enough to run the preview tooling. Use the checkout workflow above.
+`run` binds only to `127.0.0.1`. Ctrl+C stops it. Missing runtime packages are installed automatically; `setup` forces a lockfile-based dependency installation. Runtime files live in the platform's user cache; set `ITCHY_CACHE_DIR` to override its location. The compiler and `init` need no JavaScript runtime.
+
+In an itchy development checkout without `itchy.toml`, `run` and `build` use the repository examples. The checkout build also creates documentation and Python distributions.

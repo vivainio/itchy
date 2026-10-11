@@ -1,0 +1,66 @@
+name: Publish to PyPI
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
+      - uses: oven-sh/setup-bun@v2
+      - run: uv sync --locked --python 3.12
+      - run: bun install --frozen-lockfile
+      - run: uv run ty check
+      - run: uv run pytest
+      - name: Set version from release tag
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          python - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+          version = os.environ["RELEASE_TAG"].removeprefix("v")
+          if not re.fullmatch(r"\d+\.\d+\.\d+(?:(?:a|b|rc)\d+)?", version):
+              raise SystemExit(f"Invalid release version: {version}")
+          path = Path("pyproject.toml")
+          path.write_text(re.sub(r'^version = .*$', f'version = "{version}"', path.read_text(), count=1, flags=re.M))
+          PY
+      - run: uv build --out-dir dist/packages
+      - name: Check package metadata
+        run: uvx twine check dist/packages/*
+      - name: Verify installed wheel without a checkout
+        run: |
+          uv venv /tmp/itchy-smoke --python 3.12
+          uv pip install --python /tmp/itchy-smoke/bin/python dist/packages/*.whl
+          mkdir /tmp/itchy-starter
+          cd /tmp/itchy-starter
+          /tmp/itchy-smoke/bin/itchy init
+          /tmp/itchy-smoke/bin/itchy --help
+          /tmp/itchy-smoke/bin/itchy build
+          test -s dist/game.sb3
+          test -s dist/preview/vendor/audio.js
+      - uses: actions/upload-artifact@v4
+        with:
+          name: python-packages
+          path: dist/packages/
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: python-packages
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1

@@ -8,8 +8,9 @@ from typing import TypedDict
 
 from itchy.compiler import Json, compile_game
 from itchy.game import Game
+from itchy.setup import ROOT, setup
 
-ROOT = Path(__file__).resolve().parent.parent
+
 
 
 @dataclass(frozen=True)
@@ -63,7 +64,7 @@ def simulate(game: Game, *steps: Step) -> list[State]:
                 commands.append({"op": "snapshot", "sprites": list(sprites), "variables": list(variables)})
     payload = {"project": b64encode(compile_game(game)).decode(), "steps": commands}
     result = subprocess.run(
-        [str(ROOT / "bunw"), "runner/scenario.js"], cwd=ROOT,
+        [str(setup()), "runner/scenario.js"], cwd=ROOT,
         input=json.dumps(payload), capture_output=True, text=True, timeout=30, check=True,
     )
     raw: object = json.loads(result.stdout)

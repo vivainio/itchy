@@ -2,8 +2,27 @@
 name = "itchy"
 version = "0.1.0"
 description = "Typed Python game authoring and native Scratch project generation"
+readme = "README.md"
 requires-python = ">=3.12"
 dependencies = []
+keywords = ["scratch", "games", "education", "compiler"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Games/Entertainment",
+    "Topic :: Education",
+]
+
+[project.urls]
+Homepage = "https://github.com/vivainio/itchy"
+Documentation = "https://vivainio.github.io/itchy/"
+Repository = "https://github.com/vivainio/itchy"
+Issues = "https://github.com/vivainio/itchy/issues"
 
 [dependency-groups]
 dev = [
@@ -26,3 +45,16 @@ itchy-preview = "itchy.server:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["itchy"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"web" = "itchy/_runtime/web"
+"runner" = "itchy/_runtime/runner"
+"package.json" = "itchy/_runtime/package.json"
+"bun.lock" = "itchy/_runtime/bun.lock"
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/itchy", "/games", "/web", "/runner", "/tests", "/docs",
+    "/pyproject.toml", "/README.md", "/bun.lock", "/bunw",
+    "/package.json", "/uv.lock", "/zensical.toml", "/requirements-docs.txt",
+]

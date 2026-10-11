@@ -29,11 +29,13 @@ The runnable source is included directly, so the book and executable example sta
 
 ### Run and test
 
+These examples live in the itchy source repository. Run `uv sync` and activate `.venv` before using the commands below. For your own project, use `itchy init` instead.
+
 ```sh
-uv run itchy run
+itchy run
 ```
 
-Select **Hide and Seek** from the menu, then click the visible target. Build its standalone export with `uv run itchy build`; the file is `dist/hide-and-seek.sb3`.
+Select **Hide and Seek** from the menu, then click the visible target. Build its standalone export with `itchy build`; the file is `dist/hide-and-seek.sb3`.
 
 Browser tests load that exported project, wait for the target to appear, click its rendered position, check the score, and restart. Timer and randomness behavior is tested in the browser; the headless tick adapter does not control wall-clock waits or random seeds.
 

@@ -2,22 +2,35 @@
 
 Write typed Python games, generate native Scratch blocks, and export self-contained `.sb3` projects.
 
-**[Read the itchy book](https://vivainio.github.io/itchy/)** for authoring, named Python lists, logic, assets, Scratch recreations, testing, and CLI reference.
+Install with [uv](https://docs.astral.sh/uv/) and Python 3.12 or newer:
+
+```sh
+uv tool install itchy
+mkdir my-game
+cd my-game
+itchy init
+itchy run
+```
+
+`itchy init` creates a starter `game.py`, an SVG costume, and project configuration in an empty directory. Edit `game.py` to create your game; its comments link to the **[itchy book](https://vivainio.github.io/itchy/)**. `itchy run` prepares the Scratch runtime and opens your game in a local browser. The first run needs internet access to install runtime dependencies.
+
+```sh
+itchy run --no-open       # Serve without opening a browser
+itchy run --port 4400     # Choose a port
+itchy build               # Export dist/game.sb3 and a shareable browser preview
+```
+
+Open an exported `.sb3` in Scratch with **File → Load from your computer**. Generated projects use standard Scratch blocks; Scratch website import is not yet automatically verified.
+
+For development of itchy itself:
 
 ```sh
 git clone https://github.com/vivainio/itchy.git
 cd itchy
 uv sync
-uv run itchy run
+source .venv/bin/activate
+itchy check
+itchy test --browser
 ```
 
-`itchy run` sets up the local runtime, builds the examples, starts the player, and opens your browser. This early prototype currently runs from a source checkout; it has not been published to PyPI.
-
-```sh
-uv run itchy build           # .sb3 exports, offline preview, book, Python packages
-uv run itchy check           # ty
-uv run itchy test --browser  # Python/VM and browser tests
-uv run zensical serve        # preview the book
-```
-
-The book's Markdown sources are in [`docs/`](docs/), with navigation and theme in [`zensical.toml`](zensical.toml). Generated projects use standard Scratch blocks; Scratch website import is not yet automatically verified.
+The book's Markdown sources are in [`docs/`](docs/), with navigation and theme in [`zensical.toml`](zensical.toml).

@@ -30,7 +30,7 @@ Use the same variable object in declarations and scripts. A different object wit
 
 ## Add a project to the build
 
-Define `game` in a module under `games/`, import it in `itchy/build.py`, and add it to `EXAMPLES`. The current player menu and development-server routes also need an entry for a newly selectable project; discovery is not automatic yet.
+Define `game` in your project entry file (`game.py` by default). `itchy run` and `itchy build` load that file using `itchy.toml`. No registration in itchy itself is needed.
 
 Keep growing projects organized by meaning:
 
