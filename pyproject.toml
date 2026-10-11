@@ -1,0 +1,23 @@
+[project]
+name = "itchy"
+version = "0.1.0"
+description = "Typed Python game authoring and native Scratch project generation"
+requires-python = ">=3.12"
+dependencies = []
+
+[dependency-groups]
+dev = ["ty", "pytest"]
+
+[tool.ty.environment]
+root = ["."]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project.scripts]
+itchy-build = "itchy.build:main"
+itchy-preview = "itchy.server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["itchy"]

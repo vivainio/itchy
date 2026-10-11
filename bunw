@@ -1,0 +1,7 @@
+#!/bin/sh
+# Project-local Bun; an existing global Bun takes precedence.
+cd "$(dirname "$0")" || exit 1
+if command -v bun >/dev/null 2>&1; then exec bun "$@"; fi
+PATH="$PWD/.tools/bun-darwin-aarch64:$PATH"
+export PATH
+exec bun "$@"

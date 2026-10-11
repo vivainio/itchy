@@ -1,0 +1,20 @@
+{
+  "name": "itchy-runtime",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "uv run python -m itchy.build",
+    "dev": "uv run python -m itchy.server",
+    "test": "uv run pytest",
+    "check": "uv run ty check",
+    "test:browser": "bun runner/browser-test.js"
+  },
+  "dependencies": {
+    "scratch-vm": "5.0.300",
+    "scratch-render": "2.2.84",
+    "scratch-storage": "6.2.1"
+  },
+  "devDependencies": {
+    "playwright": "latest"
+  }
+}
