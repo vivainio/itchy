@@ -17,6 +17,7 @@ edit_uri = "edit/main/docs/"
 nav = [
   { "Introduction" = "index.md" },
   { "Getting started" = "getting-started.md" },
+  { "Import and clean up a Scratch game" = "importing.md" },
   { "Writing games" = [
     { "Game structure" = "game-structure.md" },
     { "Named block sequences" = "sequences.md" },

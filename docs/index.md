@@ -2,15 +2,18 @@
 
 itchy lets you describe games in typed Python, compile those descriptions into Scratch blocks, and export ordinary `.sb3` projects. The exported games contain their costumes and sounds and remain editable in Scratch.
 
+The easiest starting point is a Scratch game you already know. Import its `.sb3`, play it locally, and start improving the generated Python:
+
 ```sh
 uv tool install itchy
-mkdir my-game
+itchy import old-game.sb3 my-game
 cd my-game
-itchy init
 itchy run
 ```
 
-That command prepares the local JavaScript runtime, builds your game, starts a player, and opens your browser. Start with [Getting started](getting-started.md).
+itchy is also a way to clean up the old mess you made in the Scratch editor. Your scripts, variables, lists, and custom blocks become source files that you and an AI coding assistant can read and refactor. Give things clearer names, extract repeated sequences, and organize each sprite's behavior while checking that the game still plays as intended.
+
+Start with [Getting started](getting-started.md), then [Import and clean up a Scratch game](importing.md). To begin from scratch, use `itchy init` in an empty directory.
 
 ## Write sequences you can read
 
