@@ -1,4 +1,5 @@
 from itchy import control, events, looks, operators
+from itchy.control import if_
 from itchy import move
 from dataclasses import replace
 from io import BytesIO
@@ -139,11 +140,11 @@ def test_procedure_decorator_supports_recursion_and_boolean_parameters():
 
     @procedure(warp=True)
     def recursive(distance):
-        return control.if_(distance > 0).then_(move.steps(distance), recursive(distance - 1))
+        return if_(distance > 0).then_(move.steps(distance), recursive(distance - 1))
 
     @procedure()
     def choose(enabled: Condition):
-        return control.if_(enabled).then_(move.steps(5))
+        return if_(enabled).then_(move.steps(5))
 
     game = Game('Recursive', (), (Sprite('Player', COSTUME, (
         events.on_start(move.point_direction(90), recursive(3), choose(reporter('operator_equals',

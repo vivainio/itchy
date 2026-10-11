@@ -36,3 +36,10 @@ itchy test --browser
 ```
 
 The book's Markdown sources are in [`docs/`](docs/), with navigation and theme in [`zensical.toml`](zensical.toml).
+
+Keep local Scratch test projects as `test-apps/*.sb3` (the entire directory is
+gitignored). Run `uv run python scripts/rebuild_test_apps.py` to delete and
+recreate each matching `test-apps/<name>-python/` directory, run `ty check`
+against the checkout's environment, then build its
+`dist/game.sb3` and browser preview. The source `.sb3` files are preserved;
+edits in the generated Python directories are discarded.

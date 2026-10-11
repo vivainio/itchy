@@ -1,4 +1,5 @@
 from itchy import control, events, sensing
+from itchy.control import if_
 from itchy import move
 from dataclasses import replace
 
@@ -16,11 +17,11 @@ def test_arithmetic_branching_and_repeat_until() -> None:
         events.on_start(
             count.reset(), result.reset(),
             control.repeat_until(count >= 3, count.add(1)),
-            control.if_((count.equals(3) & ~(count < 0)) | (count > 10))
+            if_((count.equals(3) & ~(count < 0)) | (count > 10))
                 .then_([result.set((count * 4 + 6) / 2 - 1)])
                 .else_([result.set(-100)]),
             control.if_then(count <= 3, move.x(result)),
-            control.if_(count < 0).then_(result.set(-200)).else_(result.add(2)),
+            if_(count < 0).then_(result.set(-200)).else_(result.add(2)),
             control.if_then(count > 100, result.set(-300)),
         ),
     )),))
@@ -71,7 +72,7 @@ def test_reporter_references_are_validated() -> None:
 def test_elif_chain_selects_one_branch(value, expected):
     count = Num('count', value)
     result = Num('result')
-    first = control.if_(count.equals(0)).then_(result.set(10))
+    first = if_(count.equals(0)).then_(result.set(10))
     chain = (first.elif_(count.equals(1)).then_(result.set(20))
              .elif_(count.equals(2)).then_(result.set(30))
              .else_(result.set(40)))

@@ -4,19 +4,20 @@ Numeric expressions and conditions are separate types. ty rejects using `score >
 
 ```python
 from itchy import control
+from itchy.control import if_
 from itchy import move
 
 
 control.repeat_until(score >= 3, score.add(1))
 
 decision = (
-    control.if_(score.equals(3))
+    if_(score.equals(3))
     .then_([move.x(score * 4), score.add(1)])
     .else_([score.reset()])
 )
 ```
 
-Branch bodies accept ordinary lists, nested lists, or individual commands. `control.if_(...).then_(...)` is a complete command without an else branch; `control.if_(...)` alone is an incomplete builder and ty rejects it in a script. The older `if_then` and `if_else` functions remain available.
+Branch bodies accept ordinary lists, nested lists, or individual commands. `if_(...).then_(...)` is a complete command without an else branch; `if_(...)` alone is an incomplete builder and ty rejects it in a script. The older `if_then` and `if_else` functions remain available.
 
 ## Numeric reporters
 
@@ -28,7 +29,8 @@ Comparisons `<`, `>`, `<=`, and `>=` generate conditions. Use `.equals(value)` f
 
 ```python
 from itchy import control, sensing
-control.if_(sensing.key_down(Key.SPACE) & (health > 0)).then_(award_points(1))
+from itchy.control import if_
+if_(sensing.key_down(Key.SPACE) & (health > 0)).then_(award_points(1))
 ```
 
 Use `&`, `|`, and `~` for AND, OR, and NOT. Parenthesize comparisons when composing them. Python `and`, `or`, `not`, `if`, and `while` evaluate at build time; conditions raise an error if coerced to a Python boolean. Avoid Python chained comparisons such as `0 < score < 10`; write `(score > 0) & (score < 10)`.
@@ -41,8 +43,8 @@ Use `&`, `|`, and `~` for AND, OR, and NOT. Parenthesize comparisons when compos
 
 | Builder | Scratch behavior |
 | --- | --- |
-| `control.if_(condition).then_(steps).else_(other_steps)` | Select a branch using the fluent API |
-| `control.if_(condition).then_(steps)` | Run a single conditional branch |
+| `if_(condition).then_(steps).else_(other_steps)` | Select a branch using the fluent API |
+| `if_(condition).then_(steps)` | Run a single conditional branch |
 | `control.if_then(condition, *steps)` | Run the body when true |
 | `control.if_else(condition, then=steps, otherwise=steps)` | Select a branch |
 | `control.repeat(count, *steps)` | Repeat a literal or reporter number of times |

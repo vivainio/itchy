@@ -1,4 +1,5 @@
 from itchy import control, events, looks, sensing, sound
+from itchy.control import if_
 from itchy import move
 """A real collectible: collision detection, score, hiding, and restart."""
 from pathlib import Path
@@ -20,7 +21,7 @@ player = Sprite("Player", player_costume, (
     *move.horizontal_controls(step=10),
 ))
 watch_for_player = control.forever(
-    control.if_(collected.equals(0) & sensing.touching(player)).then_(collect_coin),
+    if_(collected.equals(0) & sensing.touching(player)).then_(collect_coin),
 )
 coin = Sprite("Coin", Costume(assets / "coin.png"), (
     events.on_message(ready, prepare_coin, watch_for_player),

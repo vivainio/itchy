@@ -4,6 +4,7 @@ A sequence can be an ordinary Python list. Give it a name that describes its pur
 
 ```python
 from itchy import control, events, looks, sensing
+from itchy.control import if_
 from itchy import move
 
 from itchy.game import Command
@@ -19,7 +20,7 @@ collect_coin: list[Command] = [
 ]
 
 events.on_start(reset_player)
-control.if_(sensing.touching(player)).then_(collect_coin)
+if_(sensing.touching(player)).then_(collect_coin)
 ```
 
 The snippets assume the variables and sprite references from the enclosing game. There is no sequence-specific wrapper or syntax.
@@ -28,8 +29,9 @@ The snippets assume the variables and sprite references from the enclosing game.
 
 ```python
 from itchy import control
+from itchy.control import if_
 decide_turn = (
-    control.if_(health > 0)
+    if_(health > 0)
     .then_(move_right)
     .else_(reset_player)
 )
@@ -61,6 +63,7 @@ Use a function when a sequence needs arguments:
 
 ```python
 from itchy import control, events
+from itchy.control import if_
 from itchy import move
 
 from itchy.game import action

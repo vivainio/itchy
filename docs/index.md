@@ -19,6 +19,7 @@ Start with [Getting started](getting-started.md), then [Import and clean up a Sc
 
 ```python
 from itchy import control, looks, sensing, sound
+from itchy.control import if_
 collect_coin: list[Command] = [
     score.add(1),
     collected.set(1),
@@ -27,7 +28,7 @@ collect_coin: list[Command] = [
 ]
 
 watch_for_player = control.forever(
-    control.if_(collected.equals(0) & sensing.touching(player)).then_(collect_coin),
+    if_(collected.equals(0) & sensing.touching(player)).then_(collect_coin),
 )
 ```
 

@@ -33,7 +33,7 @@ All authoring names below are exported from `itchy.game`.
 | `control.repeat(times, *steps)` | Literal or numeric-reporter count loop |
 | `control.repeat_until(condition, *steps)` | Conditional loop |
 | `control.forever(*steps)` | Unbounded loop |
-| `control.if_(condition).then_(*steps).else_(*steps)` | Fluent conditional branches; else is optional |
+| `if_(condition).then_(*steps).else_(*steps)` | Fluent conditional branches; else is optional |
 | `control.if_then(condition, *steps)` | Conditional body |
 | `control.if_else(condition, then=steps, otherwise=steps)` | Conditional branches |
 | `control.wait(seconds)` | Wall-clock wait |

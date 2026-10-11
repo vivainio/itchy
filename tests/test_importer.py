@@ -8,6 +8,60 @@ from itchy.game import Arithmetic, Comparison
 from itchy.importer import PythonImporter
 
 
+def test_imported_assignments_and_literal_left_comparisons(tmp_path):
+    from types import SimpleNamespace
+    from itchy.game import Num, ScratchLiteral
+
+    project = {'targets': [{'isStage': True, 'name': 'Stage', 'blocks': {}}]}
+    with ZipFile(BytesIO(), 'w') as archive:
+        importer = PythonImporter(Path('test.sb3'), project, archive, tmp_path)
+    score = Num('score')
+    for literal, expected in [("'0'", 0), ("'-90'", -90), ("'N'", 'N'), ("''", ''), ("'001'", '001')]:
+        source = importer._semantic_block(
+            'data_setvariableto', {'VALUE': literal}, {'VARIABLE': 'vars.score'}, {},
+            'Stage', as_command=True,
+        )
+        assert source is not None
+        command = eval(source, {'vars': SimpleNamespace(score=score), 'ScratchLiteral': ScratchLiteral})
+        value = command.value
+        assert (value.value if isinstance(value, ScratchLiteral) else value) == expected
+    for opcode in ('operator_lt', 'operator_gt'):
+        source = importer._semantic_block(
+            opcode, {'OPERAND1': '272', 'OPERAND2': 'size'}, {}, {},
+            'Stage', as_command=False,
+        )
+        assert source is not None
+        expression = eval(source, {'size': 300, 'Comparison': Comparison})
+        assert isinstance(expression, Comparison)
+        assert expression.left == 272
+        assert expression.right == 300
+
+
+def test_non_boolean_condition_sockets_use_native_blocks(tmp_path):
+    import itchy.game as game
+
+    blocks = {
+        'text': {'opcode': 'control_if', 'inputs': {'CONDITION': [1, [10, '|+']]}},
+        'number': {'opcode': 'control_if', 'inputs': {'CONDITION': [2, 'add']}},
+        'missing': {'opcode': 'control_repeat_until', 'inputs': {}},
+        'add': {'opcode': 'operator_add', 'inputs': {'NUM1': [1, [4, '1']], 'NUM2': [1, [4, '2']]}},
+    }
+    project = {'targets': [{'isStage': True, 'name': 'Stage', 'blocks': blocks}]}
+    with ZipFile(BytesIO(), 'w') as archive:
+        importer = PythonImporter(Path('test.sb3'), project, archive, tmp_path)
+    for block_id in ('text', 'number', 'missing'):
+        source = importer._expression('Stage', block_id, as_command=True)
+        command = eval(source, dict(vars(game)))
+        assert isinstance(command, game.NativeCommand)
+        assert command.opcode == blocks[block_id]['opcode']
+        if block_id == 'text':
+            assert command.inputs['CONDITION'] == '|+'
+        elif block_id == 'number':
+            assert isinstance(command.inputs['CONDITION'], Arithmetic)
+        else:
+            assert 'CONDITION' not in command.inputs
+
+
 def test_imported_procedures_infer_signature_metadata(tmp_path):
     import json
     import itchy.game as game
@@ -193,14 +247,14 @@ def test_importer_flattens_only_single_else_if_stack(tmp_path):
     project = {'targets': [{'isStage': True, 'name': 'Stage', 'blocks': {}}]}
     with ZipFile(BytesIO(), 'w') as archive:
         importer = PythonImporter(Path('test.sb3'), project, archive, tmp_path)
-        single = "(control.if_(b).then_((move.x(2),)).else_((move.x(3),)),)"
+        single = "(if_(b).then_((move.x(2),)).else_((move.x(3),)),)"
         source = importer._semantic_block('control_if_else', {'CONDITION': 'a'}, {},
                                          {'SUBSTACK': '(move.x(1),)', 'SUBSTACK2': single},
                                          'Stage', as_command=False)
         assert source is not None
         assert '.elif_(b)' in source
         assert '.else_((move.x(3),))' in source
-        multiple = '(control.if_(b).then_((move.x(2),)), move.x(4))'
+        multiple = '(if_(b).then_((move.x(2),)), move.x(4))'
         source = importer._semantic_block('control_if_else', {'CONDITION': 'a'}, {},
                                          {'SUBSTACK': '(move.x(1),)', 'SUBSTACK2': multiple},
                                          'Stage', as_command=False)

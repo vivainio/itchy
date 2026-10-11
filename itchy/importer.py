@@ -16,7 +16,7 @@ from zipfile import BadZipFile, ZipFile
 
 
 
-_API_NAMES = {name for name in vars(game_api) if not name.startswith("_")} | {"move", "looks", "sound", "events", "control", "sensing", "operators", "pen"}
+_API_NAMES = {name for name in vars(game_api) if not name.startswith("_")} | {"move", "looks", "sound", "events", "control", "sensing", "operators", "pen", "if_"}
 _BUILTIN_NAMES = set(__builtins__) if isinstance(__builtins__, dict) else set(dir(__builtins__))
 
 
@@ -503,6 +503,13 @@ class PythonImporter:
                 normal_inputs[str(input_name)] = self._input(target_key, str(input_name), input_data, active_proc)
         malformed_position = as_command and self._is_noncommand({"opcode": opcode})
         semantic = self._semantic_block(opcode, normal_inputs, python_fields, substacks, target_key, as_command=as_command)
+        if opcode in {"control_if", "control_if_else", "control_repeat_until", "control_wait_until", "control_while"}:
+            condition = inputs.get("CONDITION")
+            reference = condition[1] if isinstance(condition, list) and len(condition) > 1 else None
+            child = blocks.get(reference) if isinstance(reference, str) else None
+            if not isinstance(child, dict) or child.get("opcode") not in BOOLEAN_OPCODES:
+                # Preserve non-boolean or missing condition sockets as native blocks.
+                semantic = None
         if semantic is not None:
             return semantic
         if malformed_position:
@@ -565,7 +572,7 @@ class PythonImporter:
             left, left_literal = operand(inp('OPERAND1'))
             right, right_literal = operand(inp('OPERAND2'))
             operation = opcode.removeprefix('operator_')
-            if left_literal and right_literal:
+            if left_literal:
                 return f"Comparison({operation!r}, {left}, {right})"
             return f"({left} {'<' if operation == 'lt' else '>'} {right})"
         if opcode in {"operator_and", "operator_or"}:
@@ -612,7 +619,8 @@ class PythonImporter:
 
         list_name = field("LIST")
         if opcode == "data_setvariableto":
-            return f"{field('VARIABLE')}.set({inp('VALUE')})"
+            value, _ = operand(inp('VALUE'))
+            return f"{field('VARIABLE')}.set({value})"
         if opcode == "data_changevariableby":
             return f"{field('VARIABLE')}.add({inp('VALUE')})"
         if opcode == "data_showvariable":
@@ -640,9 +648,9 @@ class PythonImporter:
             return f"{list_name}.{method}({args})"
 
         if opcode == "control_if":
-            return f"control.if_({inp('CONDITION')}).then_({substacks.get('SUBSTACK', '()')})"
+            return f"if_({inp('CONDITION')}).then_({substacks.get('SUBSTACK', '()')})"
         if opcode == "control_if_else":
-            branch = f"control.if_({inp('CONDITION')}).then_({substacks.get('SUBSTACK', '()')})"
+            branch = f"if_({inp('CONDITION')}).then_({substacks.get('SUBSTACK', '()')})"
             otherwise = substacks.get('SUBSTACK2', '()')
             tail = ast.parse(otherwise, mode='eval').body
             if isinstance(tail, ast.Tuple) and len(tail.elts) == 1:
@@ -650,8 +658,8 @@ class PythonImporter:
                 base = child
                 while isinstance(base, ast.Call) and isinstance(base.func, ast.Attribute) and base.func.attr in {'then_', 'else_', 'elif_'}:
                     base = base.func.value
-                if (isinstance(base, ast.Call) and isinstance(base.func, ast.Attribute) and isinstance(base.func.value, ast.Name)
-                        and base.func.value.id == 'control' and base.func.attr == 'if_'):
+                if (isinstance(base, ast.Call) and isinstance(base.func, ast.Name)
+                        and base.func.id == 'if_'):
                     base.func = ast.Attribute(value=ast.parse(branch, mode='eval').body, attr='elif_', ctx=ast.Load())
                     return ast.unparse(child)
             return f"{branch}.else_({otherwise})"
@@ -841,6 +849,7 @@ class PythonImporter:
             '"""Python reconstruction of the imported Scratch project."""',
             "from pathlib import Path",
             "from itchy.game import *",
+            "from itchy.control import if_",
             "from itchy import move, looks, sound, events, control, sensing, operators, pen",
             "import vars",
             "import lists",
