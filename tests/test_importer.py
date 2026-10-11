@@ -1,3 +1,5 @@
+from itchy import control, events, operators
+from itchy import move
 from io import BytesIO
 from pathlib import Path
 from zipfile import ZipFile
@@ -68,7 +70,7 @@ def test_imported_procedures_infer_signature_metadata(tmp_path):
                   for proc in procedures)
     compiled = compile_game(game.Game('Imported', (), (), stage=game.Sprite(
         'Stage', game.Costume('<svg xmlns="http://www.w3.org/2000/svg"/>', name='empty'),
-        (game.on_start(*calls),), procedures=procedures,
+        (events.on_start(*calls),), procedures=procedures,
     )))
     with ZipFile(BytesIO(compiled)) as archive:
         output = json.loads(archive.read('project.json'))
@@ -122,12 +124,12 @@ def test_importer_uses_named_math_helpers(tmp_path):
                 'operator_mathop', {'NUM': '12'}, {'OPERATOR': repr(operation)},
                 {}, 'Stage', as_command=False,
             )
-            assert source == f'{helper}(12)'
-            assert asdict(eval(source, vars(game))) == asdict(game.math_op(operation, 12))
+            assert source == f'operators.{helper}(12)'
+            assert asdict(eval(source, {**vars(game), "operators": operators})) == asdict(operators.math_op(operation, 12))
         assert importer._semantic_block(
             'operator_mathop', {'NUM': '12'}, {'OPERATOR': "'unknown'"},
             {}, 'Stage', as_command=False,
-        ) == "math_op('unknown', 12)"
+        ) == "operators.math_op('unknown', 12)"
 
 
 def test_importer_flattens_left_join_chain(tmp_path):
@@ -135,11 +137,11 @@ def test_importer_flattens_left_join_chain(tmp_path):
     with ZipFile(BytesIO(), 'w') as archive:
         importer = PythonImporter(Path('test.sb3'), project, archive, tmp_path)
         source = importer._semantic_block(
-            'operator_join', {'STRING1': "join(vars.x, ';', vars.y)",
-                              'STRING2': "join('a', 'b')"}, {}, {},
+            'operator_join', {'STRING1': "operators.join(vars.x, ';', vars.y)",
+                              'STRING2': "operators.join('a', 'b')"}, {}, {},
             'Stage', as_command=False,
         )
-        assert source == "join(vars.x, ';', vars.y, join('a', 'b'))"
+        assert source == "operators.join(vars.x, ';', vars.y, operators.join('a', 'b'))"
 
 
 def test_imported_literals_use_python_values_and_variable_references(tmp_path):
@@ -191,16 +193,16 @@ def test_importer_flattens_only_single_else_if_stack(tmp_path):
     project = {'targets': [{'isStage': True, 'name': 'Stage', 'blocks': {}}]}
     with ZipFile(BytesIO(), 'w') as archive:
         importer = PythonImporter(Path('test.sb3'), project, archive, tmp_path)
-        single = "(if_(b).then_((move_x(2),)).else_((move_x(3),)),)"
+        single = "(control.if_(b).then_((move.x(2),)).else_((move.x(3),)),)"
         source = importer._semantic_block('control_if_else', {'CONDITION': 'a'}, {},
-                                         {'SUBSTACK': '(move_x(1),)', 'SUBSTACK2': single},
+                                         {'SUBSTACK': '(move.x(1),)', 'SUBSTACK2': single},
                                          'Stage', as_command=False)
         assert source is not None
         assert '.elif_(b)' in source
-        assert '.else_((move_x(3),))' in source
-        multiple = '(if_(b).then_((move_x(2),)), move_x(4))'
+        assert '.else_((move.x(3),))' in source
+        multiple = '(control.if_(b).then_((move.x(2),)), move.x(4))'
         source = importer._semantic_block('control_if_else', {'CONDITION': 'a'}, {},
-                                         {'SUBSTACK': '(move_x(1),)', 'SUBSTACK2': multiple},
+                                         {'SUBSTACK': '(move.x(1),)', 'SUBSTACK2': multiple},
                                          'Stage', as_command=False)
         assert source is not None
         assert '.elif_' not in source

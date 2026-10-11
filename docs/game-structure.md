@@ -3,12 +3,12 @@
 A `Game` contains declared variables, sprites, and optional messages. Each sprite contains costumes, sounds, and event scripts. Frozen dataclasses keep the authored description separate from execution state.
 
 ```python
+from itchy import events
+from itchy import move
+
 from pathlib import Path
 
-from itchy.game import (
-    Costume, Game, Key, Num, Sprite,
-    go_to, move_x, on_key, on_start,
-)
+from itchy.game import Costume, Game, Key, Num, Sprite
 
 assets = Path(__file__).parent / "assets"
 score = Num("score", initial=0)
@@ -16,9 +16,9 @@ player = Sprite(
     name="Player",
     costume=Costume(assets / "player.svg"),
     scripts=(
-        on_start(go_to(0, 0), score.reset()),
-        on_key(Key.RIGHT, move_x(10)),
-        on_key(Key.SPACE, score.add(1)),
+        events.on_start(move.to(0, 0), score.reset()),
+        events.on_key(Key.RIGHT, move.x(10)),
+        events.on_key(Key.SPACE, score.add(1)),
     ),
 )
 game = Game("Small game", variables=(score,), sprites=(player,))

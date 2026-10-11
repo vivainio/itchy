@@ -1,12 +1,11 @@
+from itchy import control, events, sensing
+from itchy import move
 from dataclasses import replace
 
 import pytest
 from games.coin_runner import player_costume
 from itchy.compiler import compile_game
-from itchy.game import (
-    Condition, Game, Key, Num, Sprite, forever, go_to,
-    if_, if_else, if_then, key_down, move_x, on_start, repeat_until, touching,
-)
+from itchy.game import Condition, Game, Key, Num, Sprite
 from itchy.testing import Flag, Press, Release, Snapshot, Tick, simulate
 
 
@@ -14,15 +13,15 @@ def test_arithmetic_branching_and_repeat_until() -> None:
     count = Num("count")
     result = Num("result")
     game = Game("Logic", (count, result), (Sprite("Player", player_costume, (
-        on_start(
+        events.on_start(
             count.reset(), result.reset(),
-            repeat_until(count >= 3, count.add(1)),
-            if_((count.equals(3) & ~(count < 0)) | (count > 10))
+            control.repeat_until(count >= 3, count.add(1)),
+            control.if_((count.equals(3) & ~(count < 0)) | (count > 10))
                 .then_([result.set((count * 4 + 6) / 2 - 1)])
                 .else_([result.set(-100)]),
-            if_then(count <= 3, move_x(result)),
-            if_(count < 0).then_(result.set(-200)).else_(result.add(2)),
-            if_then(count > 100, result.set(-300)),
+            control.if_then(count <= 3, move.x(result)),
+            control.if_(count < 0).then_(result.set(-200)).else_(result.add(2)),
+            control.if_then(count > 100, result.set(-300)),
         ),
     )),))
     state = simulate(game, Flag(), Tick(30), Snapshot(("Player",), ("count", "result")))[0]
@@ -34,7 +33,7 @@ def test_arithmetic_branching_and_repeat_until() -> None:
 def test_forever_reacts_to_key_state_and_releases() -> None:
     count = Num("count")
     game = Game("Continuous", (count,), (Sprite("Player", player_costume, (
-        on_start(go_to(0, 0), forever(if_then(key_down(Key.RIGHT), move_x(2)))),
+        events.on_start(move.to(0, 0), control.forever(control.if_then(sensing.key_down(Key.RIGHT), move.x(2)))),
     )),))
     snap = Snapshot(("Player",))
     states = simulate(game, Flag(), Tick(5), snap, Press("ArrowRight"), Tick(10), snap,
@@ -57,12 +56,12 @@ def test_reporter_references_are_validated() -> None:
     count = Num("count")
     unknown = Num("unknown")
     game = Game("Invalid", (count,), (Sprite("Player", player_costume, (
-        on_start(if_then(unknown > 0, count.add(1))),
+        events.on_start(control.if_then(unknown > 0, count.add(1))),
     )),))
     with pytest.raises(ValueError, match="Undeclared variable"):
         compile_game(game)
     bad = replace(game, sprites=(replace(game.sprites[0], scripts=(
-        on_start(if_then(touching("Missing"), count.add(1))),
+        events.on_start(control.if_then(sensing.touching("Missing"), count.add(1))),
     )),))
     with pytest.raises(ValueError, match="Unknown touching target"):
         compile_game(bad)
@@ -72,13 +71,13 @@ def test_reporter_references_are_validated() -> None:
 def test_elif_chain_selects_one_branch(value, expected):
     count = Num('count', value)
     result = Num('result')
-    first = if_(count.equals(0)).then_(result.set(10))
+    first = control.if_(count.equals(0)).then_(result.set(10))
     chain = (first.elif_(count.equals(1)).then_(result.set(20))
              .elif_(count.equals(2)).then_(result.set(30))
              .else_(result.set(40)))
     assert first.otherwise is None
     game = Game('Branches', (count, result), (Sprite('Player', player_costume, (
-        on_start(chain),
+        events.on_start(chain),
     )),))
     compile_game(game)
     state = simulate(game, Flag(), Tick(10), Snapshot((), ('result',)))[0]

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import ast
+from itchy import game as game_api
 import json
 import keyword
 from collections import Counter
@@ -13,10 +14,9 @@ import shutil
 import subprocess
 from zipfile import BadZipFile, ZipFile
 
-from itchy import game as game_api
 
 
-_API_NAMES = {name for name in vars(game_api) if not name.startswith("_")}
+_API_NAMES = {name for name in vars(game_api) if not name.startswith("_")} | {"move", "looks", "sound", "events", "control", "sensing", "operators", "pen"}
 _BUILTIN_NAMES = set(__builtins__) if isinstance(__builtins__, dict) else set(dir(__builtins__))
 
 
@@ -574,9 +574,9 @@ class PythonImporter:
         if opcode == "operator_not":
             return f"(~{inp('OPERAND')})"
         if opcode == "operator_random":
-            return f"random_number({inp('FROM')}, {inp('TO')})"
+            return f"operators.random_number({inp('FROM')}, {inp('TO')})"
         if opcode == "operator_round":
-            return f"round_number({inp('NUM')})"
+            return f"operators.round_number({inp('NUM')})"
         if opcode == "operator_mathop":
             helpers = {
                 'abs': 'abs_number', 'floor': 'floor', 'ceiling': 'ceil',
@@ -586,27 +586,29 @@ class PythonImporter:
             }
             helper = helpers.get(ast.literal_eval(field('OPERATOR')))
             if helper:
-                return f"{helper}({inp('NUM')})"
-            return f"math_op({field('OPERATOR')}, {inp('NUM')})"
+                return f"operators.{helper}({inp('NUM')})"
+            return f"operators.math_op({field('OPERATOR')}, {inp('NUM')})"
         if opcode == "operator_mod":
-            return f"modulo({inp('NUM1')}, {inp('NUM2')})"
+            return f"operators.modulo({inp('NUM1')}, {inp('NUM2')})"
         if opcode == "operator_join":
             left = inp('STRING1')
             expression = ast.parse(left, mode='eval').body
             if (isinstance(expression, ast.Call)
-                    and isinstance(expression.func, ast.Name)
-                    and expression.func.id == 'join'
+                    and isinstance(expression.func, ast.Attribute)
+                    and isinstance(expression.func.value, ast.Name)
+                    and expression.func.value.id == 'operators'
+                    and expression.func.attr == 'join'
                     and len(expression.args) >= 2
                     and not expression.keywords):
                 parts = [ast.unparse(arg) for arg in expression.args]
-                return f"join({', '.join(parts)}, {inp('STRING2')})"
-            return f"join({inp('STRING1')}, {inp('STRING2')})"
+                return f"operators.join({', '.join(parts)}, {inp('STRING2')})"
+            return f"operators.join({inp('STRING1')}, {inp('STRING2')})"
         if opcode == "operator_length":
-            return f"length({inp('STRING')})"
+            return f"operators.length({inp('STRING')})"
         if opcode == "operator_letter_of":
-            return f"letter({inp('LETTER')}, {inp('STRING')})"
+            return f"operators.letter({inp('LETTER')}, {inp('STRING')})"
         if opcode == "operator_contains":
-            return f"contains({inp('STRING1')}, {inp('STRING2')})"
+            return f"operators.contains({inp('STRING1')}, {inp('STRING2')})"
 
         list_name = field("LIST")
         if opcode == "data_setvariableto":
@@ -638,9 +640,9 @@ class PythonImporter:
             return f"{list_name}.{method}({args})"
 
         if opcode == "control_if":
-            return f"if_({inp('CONDITION')}).then_({substacks.get('SUBSTACK', '()')})"
+            return f"control.if_({inp('CONDITION')}).then_({substacks.get('SUBSTACK', '()')})"
         if opcode == "control_if_else":
-            branch = f"if_({inp('CONDITION')}).then_({substacks.get('SUBSTACK', '()')})"
+            branch = f"control.if_({inp('CONDITION')}).then_({substacks.get('SUBSTACK', '()')})"
             otherwise = substacks.get('SUBSTACK2', '()')
             tail = ast.parse(otherwise, mode='eval').body
             if isinstance(tail, ast.Tuple) and len(tail.elts) == 1:
@@ -648,82 +650,83 @@ class PythonImporter:
                 base = child
                 while isinstance(base, ast.Call) and isinstance(base.func, ast.Attribute) and base.func.attr in {'then_', 'else_', 'elif_'}:
                     base = base.func.value
-                if isinstance(base, ast.Call) and isinstance(base.func, ast.Name) and base.func.id == 'if_':
+                if (isinstance(base, ast.Call) and isinstance(base.func, ast.Attribute) and isinstance(base.func.value, ast.Name)
+                        and base.func.value.id == 'control' and base.func.attr == 'if_'):
                     base.func = ast.Attribute(value=ast.parse(branch, mode='eval').body, attr='elif_', ctx=ast.Load())
                     return ast.unparse(child)
             return f"{branch}.else_({otherwise})"
         if opcode == "control_repeat":
-            return f"repeat({inp('TIMES')}, *{substacks.get('SUBSTACK', '()')})"
+            return f"control.repeat({inp('TIMES')}, *{substacks.get('SUBSTACK', '()')})"
         if opcode == "control_repeat_until":
-            return f"repeat_until({inp('CONDITION')}, *{substacks.get('SUBSTACK', '()')})"
+            return f"control.repeat_until({inp('CONDITION')}, *{substacks.get('SUBSTACK', '()')})"
         if opcode == "control_forever":
-            return f"forever(*{substacks.get('SUBSTACK', '()')})"
+            return f"control.forever(*{substacks.get('SUBSTACK', '()')})"
         if opcode == "control_while":
-            return f"repeat_until(~{inp('CONDITION')}, *{substacks.get('SUBSTACK', '()')})"
+            return f"control.repeat_until(~{inp('CONDITION')}, *{substacks.get('SUBSTACK', '()')})"
         if opcode == "control_wait":
-            return f"wait({inp('DURATION')})"
+            return f"control.wait({inp('DURATION')})"
         if opcode == "control_wait_until":
-            return f"wait_until({inp('CONDITION')})"
+            return f"control.wait_until({inp('CONDITION')})"
         if opcode == "control_stop":
-            return f"stop({field('STOP_OPTION')})"
+            return f"control.stop({field('STOP_OPTION')})"
         if opcode == "control_create_clone_of":
-            return f"clone({inp('CLONE_OPTION')})"
+            return f"control.clone({inp('CLONE_OPTION')})"
         if opcode == "control_delete_this_clone":
-            return "delete_clone()"
+            return "control.delete_clone()"
 
         motion = {
-            "motion_movesteps": f"move({inp('STEPS')})",
-            "motion_turnright": f"turn({inp('DEGREES')})",
-            "motion_turnleft": f"turn_left({inp('DEGREES')})",
-            "motion_pointindirection": f"point_direction({inp('DIRECTION')})",
-            "motion_pointtowards": f"point_towards({inp('TOWARDS')})",
-            "motion_gotoxy": f"go_to({inp('X')}, {inp('Y')})",
-            "motion_goto": f"go_to_target({inp('TO')})",
-            "motion_changexby": f"move_x({inp('DX')})",
-            "motion_changeyby": f"move_y({inp('DY')})",
-            "motion_setx": f"set_x({inp('X')})",
-            "motion_sety": f"set_y({inp('Y')})",
-            "motion_ifonedgebounce": "bounce()",
-            "motion_xposition": "x_position()",
-            "motion_yposition": "y_position()",
-            "motion_direction": "direction()",
+            "motion_movesteps": f"move.steps({inp('STEPS')})",
+            "motion_turnright": f"move.turn({inp('DEGREES')})",
+            "motion_turnleft": f"move.turn_left({inp('DEGREES')})",
+            "motion_pointindirection": f"move.point_direction({inp('DIRECTION')})",
+            "motion_pointtowards": f"move.point_towards({inp('TOWARDS')})",
+            "motion_gotoxy": f"move.to({inp('X')}, {inp('Y')})",
+            "motion_goto": f"move.to_target({inp('TO')})",
+            "motion_changexby": f"move.x({inp('DX')})",
+            "motion_changeyby": f"move.y({inp('DY')})",
+            "motion_setx": f"move.set_x({inp('X')})",
+            "motion_sety": f"move.set_y({inp('Y')})",
+            "motion_ifonedgebounce": "move.bounce()",
+            "motion_xposition": "move.x_position()",
+            "motion_yposition": "move.y_position()",
+            "motion_direction": "move.direction()",
         }
         if opcode in motion:
             return motion[opcode]
         if opcode in {"looks_show", "looks_hide", "looks_nextcostume", "looks_cleargraphiceffects"}:
-            return {"looks_show": "show()", "looks_hide": "hide()", "looks_nextcostume": "next_costume()",
-                    "looks_cleargraphiceffects": "clear_effects()"}[opcode]
+            return {"looks_show": "looks.show()", "looks_hide": "looks.hide()", "looks_nextcostume": "looks.next_costume()",
+                    "looks_cleargraphiceffects": "looks.clear_effects()"}[opcode]
         if opcode == "looks_setsizeto":
-            return f"set_size({inp('SIZE')})"
+            return f"looks.set_size({inp('SIZE')})"
         if opcode == "looks_changesizeby":
-            return f"change_size({inp('CHANGE')})"
+            return f"looks.change_size({inp('CHANGE')})"
         if opcode == "looks_say":
-            return f"say({inp('MESSAGE')})"
+            return f"looks.say({inp('MESSAGE')})"
         if opcode == "looks_sayforsecs":
-            return f"say({inp('MESSAGE')}, {inp('SECS')})"
+            return f"looks.say({inp('MESSAGE')}, {inp('SECS')})"
         if opcode == "looks_think":
-            return f"think({inp('MESSAGE')})"
+            return f"looks.think({inp('MESSAGE')})"
         if opcode == "looks_thinkforsecs":
-            return f"think({inp('MESSAGE')}, {inp('SECS')})"
+            return f"looks.think({inp('MESSAGE')}, {inp('SECS')})"
         if opcode == "looks_switchcostumeto":
-            return f"switch_costume({inp('COSTUME')})"
+            return f"looks.switch_costume({inp('COSTUME')})"
         if opcode == "looks_seteffectto":
-            return f"set_effect({field('EFFECT')}, {inp('VALUE')})"
+            return f"looks.set_effect({field('EFFECT')}, {inp('VALUE')})"
         if opcode == "looks_changeeffectby":
-            return f"change_effect({field('EFFECT')}, {inp('CHANGE')})"
+            return f"looks.change_effect({field('EFFECT')}, {inp('CHANGE')})"
         if opcode == "looks_size":
             return "reporter('looks_size')"
         if opcode == "looks_costumenumbername":
-            return f"costume_number_or_name({field('NUMBER_NAME')})"
+            return f"looks.costume_number_or_name({field('NUMBER_NAME')})"
         if opcode == "looks_switchbackdropto":
-            return f"switch_backdrop({inp('BACKDROP')})"
+            return f"looks.switch_backdrop({inp('BACKDROP')})"
         if opcode == "motion_setrotationstyle":
-            return f"rotation_style({field('STYLE')})"
+            return f"move.rotation_style({field('STYLE')})"
 
         if opcode == "event_broadcast":
-            return f"broadcast({inp('BROADCAST_INPUT')})"
+            return f"events.broadcast({inp('BROADCAST_INPUT')})"
         if opcode == "event_broadcastandwait":
-            return f"broadcast({inp('BROADCAST_INPUT')}, wait=True)"
+            return f"events.broadcast({inp('BROADCAST_INPUT')}, wait=True)"
         if opcode == "sound_play":
             menu = inputs.get("SOUND_MENU", "")
             sound_name = None
@@ -732,8 +735,8 @@ class PythonImporter:
                 sound_name = _string(ast.literal_eval(match.group(1)))
             symbol = self.target_sounds.get(target_key, {}).get(sound_name or "")
             if symbol:
-                return f"play_sound({symbol})"
-            return f"play_sound({menu})"
+                return f"sound.play({symbol})"
+            return f"sound.play({menu})"
         if opcode == "sound_playuntildone":
             menu = inputs.get("SOUND_MENU", "")
             sound_name = None
@@ -742,27 +745,27 @@ class PythonImporter:
                 sound_name = _string(ast.literal_eval(match.group(1)))
             symbol = self.target_sounds.get(target_key, {}).get(sound_name or "")
             if symbol:
-                return f"play_sound({symbol}, wait=True)"
-            return f"play_sound({menu}, wait=True)"
+                return f"sound.play({symbol}, wait=True)"
+            return f"sound.play({menu}, wait=True)"
         if opcode == "sound_stopallsounds":
-            return "stop_sounds()"
+            return "sound.stop_all()"
         if opcode == "sound_setvolumeto":
-            return f"set_volume({inp('VOLUME')})"
+            return f"sound.set_volume({inp('VOLUME')})"
         if opcode == "sound_changevolumeby":
-            return f"change_volume({inp('VOLUME')})"
+            return f"sound.change_volume({inp('VOLUME')})"
 
         if opcode == "sensing_mousedown":
-            return "mouse_down()"
+            return "sensing.mouse_down()"
         if opcode == "sensing_mousex":
-            return "mouse_x()"
+            return "sensing.mouse_x()"
         if opcode == "sensing_mousey":
-            return "mouse_y()"
+            return "sensing.mouse_y()"
         if opcode == "sensing_timer":
-            return "timer()"
+            return "sensing.timer()"
         if opcode == "sensing_resettimer":
-            return "reset_timer()"
+            return "sensing.reset_timer()"
         if opcode == "sensing_answer":
-            return "answer()"
+            return "sensing.answer()"
         if opcode == "sensing_keypressed":
             value = inp('KEY_OPTION')
             node = ast.parse(value, mode='eval').body
@@ -770,9 +773,9 @@ class PythonImporter:
                 value = ast.unparse(node.args[2])
             if not isinstance(ast.parse(value, mode='eval').body, ast.Constant):
                 return f"predicate('sensing_keypressed', inputs={{'KEY_OPTION': {value}}})"
-            return f"key_down({value})"
+            return f"sensing.key_down({value})"
         if opcode == "sensing_askandwait":
-            return f"ask({inp('QUESTION')})"
+            return f"sensing.ask({inp('QUESTION')})"
         if opcode == "sensing_touchingobject":
             value = inp('TOUCHINGOBJECTMENU')
             node = ast.parse(value, mode='eval').body
@@ -780,26 +783,26 @@ class PythonImporter:
                 value = ast.unparse(node.args[2])
             if not isinstance(ast.parse(value, mode='eval').body, ast.Constant):
                 return f"predicate('sensing_touchingobject', inputs={{'TOUCHINGOBJECTMENU': {value}}})"
-            return f"touching({value})"
+            return f"sensing.touching({value})"
         if opcode == "sensing_of":
-            return f"property_of({inp('OBJECT')}, {field('PROPERTY')})"
+            return f"sensing.property_of({inp('OBJECT')}, {field('PROPERTY')})"
         if opcode == "sensing_setdragmode":
-            return f"set_drag_mode({field('DRAG_MODE')})"
+            return f"sensing.set_drag_mode({field('DRAG_MODE')})"
 
         if opcode == "pen_stamp":
-            return "stamp()"
+            return "pen.stamp()"
         if opcode == "pen_penUp":
-            return "pen_up()"
+            return "pen.pen_up()"
         if opcode == "pen_penDown":
-            return "pen_down()"
+            return "pen.pen_down()"
         if opcode == "pen_clear":
-            return "clear_pen()"
+            return "pen.clear_pen()"
         if opcode == "pen_setPenSizeTo":
-            return f"set_pen_size({inp('SIZE')})"
+            return f"pen.set_pen_size({inp('SIZE')})"
         if opcode == "pen_setPenColorToColor":
-            return f"set_pen_color({inp('COLOR')})"
+            return f"pen.set_pen_color({inp('COLOR')})"
         if opcode == "pen_setPenColorParamTo":
-            return f"set_pen_color_param({field('COLOR_PARAM')}, {inp('VALUE')})"
+            return f"pen.set_pen_color_param({field('COLOR_PARAM')}, {inp('VALUE')})"
         return None
 
     @staticmethod
@@ -838,6 +841,7 @@ class PythonImporter:
             '"""Python reconstruction of the imported Scratch project."""',
             "from pathlib import Path",
             "from itchy.game import *",
+            "from itchy import move, looks, sound, events, control, sensing, operators, pen",
             "import vars",
             "import lists",
             "import messages",
@@ -884,15 +888,15 @@ class PythonImporter:
                     continue
                 body = self._chain(target_key, block.get("next"), str(block_id))
                 if opcode == "event_whenflagclicked":
-                    scripts.append(f"on_start(*{body})")
+                    scripts.append(f"events.on_start(*{body})")
                 elif opcode == "control_start_as_clone":
-                    scripts.append(f"on_clone(*{body})")
+                    scripts.append(f"events.on_clone(*{body})")
                 elif opcode == "event_whenkeypressed":
                     key_field = block.get("fields", {}).get("KEY_OPTION", [""]) if isinstance(block.get("fields"), dict) else [""]
                     key_value = key_field[0] if isinstance(key_field, list) and key_field else ""
-                    scripts.append(f"on_key({_string(key_value)!r}, *{body})")
+                    scripts.append(f"events.on_key({_string(key_value)!r}, *{body})")
                 elif opcode in ("event_whenthisspriteclicked", "event_whenstageclicked"):
-                    scripts.append(f"on_click(*{body})")
+                    scripts.append(f"events.on_click(*{body})")
                 elif opcode == "event_whenbroadcastreceived":
                     field = block.get("fields", {}).get("BROADCAST_OPTION", [""]) if isinstance(block.get("fields"), dict) else [""]
                     message_id = _string(field[1]) if isinstance(field, list) and len(field) > 1 else ""
@@ -902,7 +906,7 @@ class PythonImporter:
                         message_symbol = f"Message({message_name!r})"
                     else:
                         message_symbol = message[0]
-                    scripts.append(f"on_message({message_symbol}, *{body})")
+                    scripts.append(f"events.on_message({message_symbol}, *{body})")
                 elif opcode not in HAT_OPCODES:
                     detached = self._chain(target_key, str(block_id))
                     scripts.append(f"Script(None, {detached}, detached=True)")
@@ -913,7 +917,7 @@ class PythonImporter:
                     field_src = "fields={" + ", ".join(f"{key!r}: {value}" for key, value in fields.items()) + "}" if fields else ""
                     event_expr = f"block({opcode!r}{', ' if field_src else ''}{field_src})"
                     self.generic_fallbacks[opcode] += 1
-                    scripts.append(f"on_event({event_expr}, *{body})")
+                    scripts.append(f"events.on_event({event_expr}, *{body})")
             scripts.extend(self._detached_stacks(target_key, blocks))
             self.lines.append(f"{symbol} = Sprite(")
             self.lines.append(f"    {_string(target.get('name', 'Stage'))!r},")

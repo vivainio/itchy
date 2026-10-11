@@ -1,3 +1,5 @@
+from itchy import control, events
+from itchy import move
 from dataclasses import replace
 from io import BytesIO
 import json
@@ -6,7 +8,7 @@ from zipfile import ZipFile
 import pytest
 from games.coin_runner import game, player_costume
 from itchy.compiler import compile_game
-from itchy.game import Game, Num, Sprite, action, go_to, move_x, on_start, repeat
+from itchy.game import Game, Num, Sprite, action
 from itchy.testing import Flag, Press, Release, Snapshot, Tick, simulate
 
 
@@ -29,12 +31,12 @@ def test_nested_generated_actions() -> None:
 
     @action
     def stride(distance: float, count: int):
-        return repeat(count, move_x(distance), points.add(1))
+        return control.repeat(count, move.x(distance), points.add(1))
 
     generated = Game("Generated", (points,), (Sprite(
         "Walker", player_costume,
-        (on_start(go_to(0, 0), points.reset(), [stride(4, 3), stride(-2, 2)],
-                  repeat(2, repeat(2, move_x(1)))),),
+        (events.on_start(move.to(0, 0), points.reset(), [stride(4, 3), stride(-2, 2)],
+                  control.repeat(2, control.repeat(2, move.x(1)))),),
     ),))
     state = simulate(generated, Flag(), Tick(40), Snapshot(("Walker",), ("points",)))[0]
     assert state["sprites"]["Walker"]["x"] == 12
@@ -43,7 +45,7 @@ def test_nested_generated_actions() -> None:
 
 def test_undeclared_variable_is_rejected() -> None:
     missing = Num("missing")
-    bad = replace(game, sprites=(replace(game.sprites[0], scripts=(on_start(missing.set(1)),)),))
+    bad = replace(game, sprites=(replace(game.sprites[0], scripts=(events.on_start(missing.set(1)),)),))
     with pytest.raises(ValueError, match="Undeclared variable"):
         compile_game(bad)
 

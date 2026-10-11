@@ -52,19 +52,23 @@ from itchy.game import Message
 ready = Message("ready")
 ''',
     "stage.py": '''"""Reset shared state before starting the sprites."""
-from itchy.game import Costume, Sprite, broadcast, on_start
+from itchy import events
+from itchy import move
+from itchy.game import Costume, Sprite
 import vars
 import lists
 import messages
 
 _stage = Sprite("Stage", Costume('<svg xmlns="http://www.w3.org/2000/svg" width="480" height="360"><rect width="480" height="360" fill="#f1f5f9"/></svg>'), (
-    on_start(vars.score.reset(), vars.status.set(vars.status.initial), lists.collected.clear(),
-             broadcast(messages.ready)),
+    events.on_start(vars.score.reset(), vars.status.set(vars.status.initial), lists.collected.clear(),
+             events.broadcast(messages.ready)),
 ))
 ''',
     "sprite_player.py": '''"""Move with the arrow keys. Local variables live in svars."""
+from itchy import events
 from pathlib import Path
-from itchy.game import Costume, Key, Num, Sprite, go_to, move_x, on_key, on_message
+from itchy import move
+from itchy.game import Costume, Key, Num, Sprite
 import messages
 
 _root = Path(__file__).parent
@@ -75,14 +79,16 @@ class svars:
 
 
 player = Sprite("Player", Costume(_root / "assets/player.svg"), (
-    on_message(messages.ready, svars.step.reset(), go_to(-80, 0)),
-    on_key(Key.RIGHT, move_x(svars.step)),
-    on_key(Key.LEFT, move_x(0 - svars.step)),
+    events.on_message(messages.ready, svars.step.reset(), move.to(-80, 0)),
+    events.on_key(Key.RIGHT, move.x(svars.step)),
+    events.on_key(Key.LEFT, move.x(0 - svars.step)),
 ), variables=(svars.step,))
 ''',
     "sprite_coin.py": '''"""Click the coin to score and record each collection in a list."""
+from itchy import events, looks, operators
 from pathlib import Path
-from itchy.game import Costume, Sprite, go_to, on_click, on_message, random_number, say, show
+from itchy import move
+from itchy.game import Costume, Sprite
 import vars
 import lists
 import messages
@@ -90,10 +96,10 @@ import messages
 _root = Path(__file__).parent
 
 coin = Sprite("Coin", Costume(_root / "assets/coin.svg"), (
-    on_message(messages.ready, go_to(80, 0), show()),
-    on_click(vars.score.add(1), lists.collected.append(vars.score),
-             vars.status.set("Coin collected!"), say(vars.status, seconds=0.5),
-             go_to(random_number(-200, 200), random_number(-140, 140))),
+    events.on_message(messages.ready, move.to(80, 0), looks.show()),
+    events.on_click(vars.score.add(1), lists.collected.append(vars.score),
+             vars.status.set("Coin collected!"), looks.say(vars.status, seconds=0.5),
+             move.to(operators.random_number(-200, 200), operators.random_number(-140, 140))),
 ))
 ''',
 }

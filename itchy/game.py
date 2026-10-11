@@ -124,17 +124,9 @@ class RandomNumber(NumberExpression):
     high: Number
 
 
-def random_number(low: Number, high: Number) -> NumberExpression:
-    return RandomNumber(low, high)
-
-
 @dataclass(frozen=True)
 class Wait:
     seconds: Number
-
-
-def wait(seconds: Number) -> Wait:
-    return Wait(seconds)
 
 
 @dataclass(frozen=True, eq=False)
@@ -164,14 +156,6 @@ class KeyDown(Condition):
 @dataclass(frozen=True, eq=False)
 class Touching(Condition):
     target: str
-
-
-def key_down(key: Key | str) -> Condition:
-    return KeyDown(key)
-
-
-def touching(target: Sprite | str) -> Condition:
-    return Touching(target.name if isinstance(target, Sprite) else target)
 
 
 @dataclass(frozen=True, eq=False)
@@ -268,10 +252,6 @@ class IfBuilder:
         return If(self.condition, flatten(steps))
 
 
-def if_(condition: Condition) -> IfBuilder:
-    return IfBuilder(condition)
-
-
 @dataclass(frozen=True)
 class Forever:
     body: tuple[Command, ...]
@@ -317,14 +297,6 @@ class Broadcast:
     wait: bool = False
 
 
-def broadcast(message: Message, *, wait: bool = False) -> Broadcast:
-    return Broadcast(message, wait)
-
-
-def on_message(message: Message, *steps: Steps) -> Script:
-    return Script(None, flatten(steps), message)
-
-
 @dataclass(frozen=True)
 class Script:
     key: Key | str | None
@@ -357,12 +329,6 @@ class Sound:
 class PlaySound:
     sound: Sound
     wait: bool = False
-
-
-def play_sound(sound: Sound | Value | Menu, *, wait: bool = False) -> PlaySound | NativeCommand:
-    if isinstance(sound, Sound):
-        return PlaySound(sound, wait)
-    return block("sound_playuntildone" if wait else "sound_play", inputs={"SOUND_MENU": sound})
 
 
 @dataclass(frozen=True)
@@ -433,67 +399,11 @@ class Game:
     text_to_speech_language: str | None = None
 
 
-def on_start(*steps: Steps) -> Script:
-    return Script(None, flatten(steps))
-
-
-def on_key(key: Key | str, *steps: Steps) -> Script:
-    return Script(key, flatten(steps))
-
-
-def go_to(x: Number, y: Number) -> GoTo:
-    return GoTo(x, y)
-
-
-def move_x(distance: Number) -> MoveX:
-    return MoveX(distance)
-
-
-def repeat(times: Number, *steps: Steps) -> Repeat:
-    return Repeat(times, flatten(steps))
-
-
 def action[**P](generate: Callable[P, Steps]) -> Callable[P, tuple[Command, ...]]:
     """A typed build-time block generator; expands into ordinary Scratch blocks."""
     def expand(*args: P.args, **kwargs: P.kwargs) -> tuple[Command, ...]:
         return flatten((generate(*args, **kwargs),))
     return expand
-
-
-def horizontal_controls(
-    *, step: float, left: Key = Key.LEFT, right: Key = Key.RIGHT,
-) -> tuple[Script, ...]:
-    """Generate key events; movement is per event, including OS repeats."""
-    return (on_key(left, move_x(-step)), on_key(right, move_x(step)))
-
-
-def if_then(condition: Condition, *steps: Steps) -> If:
-    return If(condition, flatten(steps))
-
-
-def if_else(condition: Condition, *, then: Steps, otherwise: Steps) -> If:
-    return If(condition, flatten((then,)), flatten((otherwise,)))
-
-
-def forever(*steps: Steps) -> Forever:
-    return Forever(flatten(steps))
-
-
-def repeat_until(condition: Condition, *steps: Steps) -> RepeatUntil:
-    return RepeatUntil(condition, flatten(steps))
-
-
-def hide() -> Visibility:
-    return Visibility(False)
-
-
-def show() -> Visibility:
-    return Visibility(True)
-
-
-
-def on_click(*steps: Steps) -> Script:
-    return Script(None, flatten(steps), clicked=True)
 
 
 @dataclass(frozen=True, eq=False)
@@ -552,10 +462,6 @@ def reporter(opcode: str, *, inputs: dict[str, Value | Menu] | None = None,
 def predicate(opcode: str, *, inputs: dict[str, Value | Menu] | None = None,
               fields: dict[str, FieldValue] | None = None) -> NativeCondition:
     return NativeCondition(opcode, inputs or {}, fields or {})
-
-
-def on_event(event: NativeCommand, *steps: Steps) -> Script:
-    return Script(None, flatten(steps), event=event)
 
 
 @dataclass(eq=False)
@@ -687,319 +593,3 @@ def procedure(*, warp: bool = False, name: str | None = None,
     return decorate
 
 
-def move(steps: Number) -> NativeCommand:
-    return block("motion_movesteps", inputs={"STEPS": steps})
-
-
-def move_y(distance: Number) -> NativeCommand:
-    return block("motion_changeyby", inputs={"DY": distance})
-
-
-def turn(degrees: Number) -> NativeCommand:
-    return block("motion_turnright", inputs={"DEGREES": degrees})
-
-
-def turn_left(degrees: Number) -> NativeCommand:
-    return block("motion_turnleft", inputs={"DEGREES": degrees})
-
-
-def point_direction(direction: Number) -> NativeCommand:
-    return block("motion_pointindirection", inputs={"DIRECTION": direction})
-
-
-def set_x(x: Number) -> NativeCommand:
-    return block("motion_setx", inputs={"X": x})
-
-
-def set_y(y: Number) -> NativeCommand:
-    return block("motion_sety", inputs={"Y": y})
-
-
-def glide(seconds: Number, x: Number, y: Number) -> NativeCommand:
-    return block("motion_glidesecstoxy", inputs={"SECS": seconds, "X": x, "Y": y})
-
-
-def bounce() -> NativeCommand:
-    return block("motion_ifonedgebounce")
-
-
-def say(message: Value, seconds: Number | None = None) -> NativeCommand:
-    return block("looks_say" if seconds is None else "looks_sayforsecs",
-                 inputs={"MESSAGE": message} if seconds is None else {"MESSAGE": message, "SECS": seconds})
-
-
-def think(message: Value, seconds: Number | None = None) -> NativeCommand:
-    return block("looks_think" if seconds is None else "looks_thinkforsecs",
-                 inputs={"MESSAGE": message} if seconds is None else {"MESSAGE": message, "SECS": seconds})
-
-
-def switch_costume(name: Value | Menu) -> NativeCommand:
-    costume = Menu("looks_costume", "COSTUME", name) if isinstance(name, str) else name
-    return block("looks_switchcostumeto", inputs={"COSTUME": costume})
-
-
-def next_costume() -> NativeCommand:
-    return block("looks_nextcostume")
-
-
-def set_size(size: Number) -> NativeCommand:
-    return block("looks_setsizeto", inputs={"SIZE": size})
-
-
-def clone(target: Sprite | str | Value | Menu = "_myself_") -> NativeCommand:
-    clone_target = Menu("control_create_clone_of_menu", "CLONE_OPTION", target.name if isinstance(target, Sprite) else target) if isinstance(target, (Sprite, str)) else target
-    return block("control_create_clone_of", inputs={"CLONE_OPTION": clone_target})
-
-
-def delete_clone() -> NativeCommand:
-    return block("control_delete_this_clone")
-
-
-def on_clone(*steps: Steps) -> Script:
-    return on_event(block("control_start_as_clone"), *steps)
-
-
-def join(left: Value, right: Value, *parts: Value) -> NativeReporter:
-    """Concatenate values using left-nested Scratch join blocks."""
-    result = reporter("operator_join", inputs={"STRING1": left, "STRING2": right})
-    for part in parts:
-        result = reporter("operator_join", inputs={"STRING1": result, "STRING2": part})
-    return result
-
-
-def letter(index: Value, text: Value) -> NativeReporter:
-    return reporter("operator_letter_of", inputs={"LETTER": index, "STRING": text})
-
-
-def length(text: Value) -> NativeReporter:
-    return reporter("operator_length", inputs={"STRING": text})
-
-
-def contains(text: Value, part: Value) -> NativeCondition:
-    return predicate("operator_contains", inputs={"STRING1": text, "STRING2": part})
-
-
-def go_to_target(target: Sprite | str | Value | Menu) -> NativeCommand:
-    destination = Menu("motion_goto_menu", "TO", target.name if isinstance(target, Sprite) else target) if isinstance(target, (Sprite, str)) else target
-    return block("motion_goto", inputs={"TO": destination})
-
-
-def point_towards(target: Sprite | str | Value | Menu) -> NativeCommand:
-    destination = Menu("motion_pointtowards_menu", "TOWARDS", target.name if isinstance(target, Sprite) else target) if isinstance(target, (Sprite, str)) else target
-    return block("motion_pointtowards", inputs={"TOWARDS": destination})
-
-
-def rotation_style(style: Literal["all around", "left-right", "don't rotate"]) -> NativeCommand:
-    return block("motion_setrotationstyle", fields={"STYLE": style})
-
-
-def change_size(amount: Number) -> NativeCommand:
-    return block("looks_changesizeby", inputs={"CHANGE": amount})
-
-
-def set_effect(effect: str, value: Number) -> NativeCommand:
-    return block("looks_seteffectto", inputs={"VALUE": value}, fields={"EFFECT": effect})
-
-
-def change_effect(effect: str, amount: Number) -> NativeCommand:
-    return block("looks_changeeffectby", inputs={"CHANGE": amount}, fields={"EFFECT": effect})
-
-
-def clear_effects() -> NativeCommand:
-    return block("looks_cleargraphiceffects")
-
-
-def stop_sounds() -> NativeCommand:
-    return block("sound_stopallsounds")
-
-
-def set_volume(value: Number) -> NativeCommand:
-    return block("sound_setvolumeto", inputs={"VOLUME": value})
-
-
-def change_volume(amount: Number) -> NativeCommand:
-    return block("sound_changevolumeby", inputs={"VOLUME": amount})
-
-
-def wait_until(condition: Condition) -> NativeCommand:
-    return block("control_wait_until", inputs={"CONDITION": condition})
-
-
-def stop(option: Literal["all", "this script", "other scripts in sprite"] = "all") -> NativeCommand:
-    return block("control_stop", fields={"STOP_OPTION": option})
-
-
-def ask(question: Value) -> NativeCommand:
-    return block("sensing_askandwait", inputs={"QUESTION": question})
-
-
-def answer() -> NativeReporter:
-    return reporter("sensing_answer")
-
-
-def mouse_x() -> NativeReporter:
-    return reporter("sensing_mousex")
-
-
-def mouse_y() -> NativeReporter:
-    return reporter("sensing_mousey")
-
-
-def mouse_down() -> NativeCondition:
-    return predicate("sensing_mousedown")
-
-
-def timer() -> NativeReporter:
-    return reporter("sensing_timer")
-
-
-def reset_timer() -> NativeCommand:
-    return block("sensing_resettimer")
-
-
-def x_position() -> NativeReporter:
-    return reporter("motion_xposition")
-
-
-def y_position() -> NativeReporter:
-    return reporter("motion_yposition")
-
-
-def direction() -> NativeReporter:
-    return reporter("motion_direction")
-
-
-def modulo(left: Number, right: Number) -> NativeReporter:
-    return reporter("operator_mod", inputs={"NUM1": left, "NUM2": right})
-
-
-def round_number(value: Number) -> NativeReporter:
-    return reporter("operator_round", inputs={"NUM": value})
-
-
-def math_op(operation: str, value: Number) -> NativeReporter:
-    return reporter("operator_mathop", inputs={"NUM": value}, fields={"OPERATOR": operation})
-
-
-def abs_number(value: Number) -> NativeReporter:
-    return math_op('abs', value)
-
-
-def floor(value: Number) -> NativeReporter:
-    return math_op('floor', value)
-
-
-def ceil(value: Number) -> NativeReporter:
-    return math_op('ceiling', value)
-
-
-def sqrt(value: Number) -> NativeReporter:
-    return math_op('sqrt', value)
-
-
-def sin(value: Number) -> NativeReporter:
-    """Scratch sin; angles are in degrees."""
-    return math_op('sin', value)
-
-
-def cos(value: Number) -> NativeReporter:
-    """Scratch cos; angles are in degrees."""
-    return math_op('cos', value)
-
-
-def tan(value: Number) -> NativeReporter:
-    """Scratch tan; angles are in degrees."""
-    return math_op('tan', value)
-
-
-def asin(value: Number) -> NativeReporter:
-    """Scratch asin; angles are in degrees."""
-    return math_op('asin', value)
-
-
-def acos(value: Number) -> NativeReporter:
-    """Scratch acos; angles are in degrees."""
-    return math_op('acos', value)
-
-
-def atan(value: Number) -> NativeReporter:
-    """Scratch atan; angles are in degrees."""
-    return math_op('atan', value)
-
-
-def ln(value: Number) -> NativeReporter:
-    return math_op('ln', value)
-
-
-def log10(value: Number) -> NativeReporter:
-    return math_op('log', value)
-
-
-def exp(value: Number) -> NativeReporter:
-    return math_op('e ^', value)
-
-
-def pow10(value: Number) -> NativeReporter:
-    return math_op('10 ^', value)
-
-
-def stamp() -> NativeCommand:
-    return block("pen_stamp")
-
-
-def pen_up() -> NativeCommand:
-    return block("pen_penUp")
-
-
-def pen_down() -> NativeCommand:
-    return block("pen_penDown")
-
-
-def clear_pen() -> NativeCommand:
-    return block("pen_clear")
-
-
-def set_pen_size(size: Number) -> NativeCommand:
-    return block("pen_setPenSizeTo", inputs={"SIZE": size})
-
-
-def set_pen_color(color: Value) -> NativeCommand:
-    return block("pen_setPenColorToColor", inputs={"COLOR": color})
-
-
-def set_pen_color_param(parameter: str, value: Number) -> NativeCommand:
-    return block("pen_setPenColorParamTo", inputs={"VALUE": value}, fields={"COLOR_PARAM": parameter})
-
-
-def costume_number_or_name(mode: str) -> NativeReporter:
-    return reporter("looks_costumenumbername", fields={"NUMBER_NAME": mode})
-
-
-def set_drag_mode(mode: str) -> NativeCommand:
-    return block("sensing_setdragmode", fields={"DRAG_MODE": mode})
-
-
-def property_of(target: Value | Menu, property_name: str) -> NativeReporter:
-    return reporter("sensing_of", inputs={"OBJECT": target}, fields={"PROPERTY": property_name})
-
-
-def round_number(value: Number) -> NativeReporter:
-    return reporter("operator_round", inputs={"NUM": value})
-
-
-def math_function(function: str, value: Number) -> NativeReporter:
-    return reporter("operator_mathop", inputs={"NUM": value}, fields={"OPERATOR": function})
-
-
-def switch_backdrop(name: Value | Menu, *, wait: bool = False) -> NativeCommand:
-    backdrop = Menu("looks_backdrops", "BACKDROP", name) if isinstance(name, str) else name
-    return block("looks_switchbackdroptoandwait" if wait else "looks_switchbackdropto",
-                 inputs={"BACKDROP": backdrop})
-
-
-def next_backdrop() -> NativeCommand:
-    return block("looks_nextbackdrop")
-
-
-def on_backdrop(name: str, *steps: Steps) -> Script:
-    return on_event(block("event_whenbackdropswitchesto", fields={"BACKDROP": name}), *steps)

@@ -12,10 +12,10 @@ The target alternates between hiding and appearing at random positions. Clicking
 
 | Original Scratch sequence | itchy description |
 | --- | --- |
-| Green flag; set score; go to center; show | `on_start(reset_round, ...)` |
-| Forever; hide; wait; choose random x/y; show; wait | `forever(hide_then_appear)` |
-| When sprite clicked; change score; sound; relocate | `on_click(found_target)` |
-| Pick random | `random_number(low, high)` |
+| Green flag; set score; go to center; show | `events.on_start(reset_round, ...)` |
+| Forever; hide; wait; choose random x/y; show; wait | `control.forever(hide_then_appear)` |
+| When sprite clicked; change score; sound; relocate | `events.on_click(found_target)` |
+| Pick random | `operators.random_number(low, high)` |
 
 ### Name the sequences with lists
 
@@ -51,7 +51,7 @@ Original: [Pong Starter](https://scratch.mit.edu/projects/10128515/) by **Scratc
 | --- | --- |
 | Ball initializes at a position and direction | Supported with `go_to` and `point_direction` |
 | Ball moves and bounces at edges forever | Supported with `forever`, `move`, and `bounce` |
-| Paddle follows mouse x | Supported with `set_x(mouse_x())` |
+| Paddle follows mouse x | Supported with `move.set_x(sensing.mouse_x())` |
 | Touch paddle; sound; randomized turn; move away | Supported with `touching`, `play_sound`, `if_`, `random_number`, and `turn` |
 | Touch losing color; stop | `stop` supported; color sensing available through `predicate("sensing_touchingcolor", ...)` |
 

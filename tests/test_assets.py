@@ -1,3 +1,4 @@
+from itchy import events, sound
 from dataclasses import replace
 from io import BytesIO
 from pathlib import Path
@@ -8,7 +9,7 @@ import pytest
 from games.logic_playground import game
 from itchy.build import build
 from itchy.compiler import compile_game
-from itchy.game import Sound, on_start, play_sound
+from itchy.game import Sound
 
 
 def test_png_and_wav_are_embedded_with_metadata() -> None:
@@ -25,8 +26,8 @@ def test_png_and_wav_are_embedded_with_metadata() -> None:
 
 
 def test_undeclared_sound_is_rejected(tmp_path: Path) -> None:
-    sound = Sound("Missing", tmp_path / "missing.wav")
-    bad = replace(game, sprites=(replace(game.sprites[0], scripts=(on_start(play_sound(sound)),)),))
+    undeclared_sound = Sound("Missing", tmp_path / "missing.wav")
+    bad = replace(game, sprites=(replace(game.sprites[0], scripts=(events.on_start(sound.play(undeclared_sound)),)),))
     with pytest.raises(ValueError, match="Undeclared sound"):
         compile_game(bad)
 

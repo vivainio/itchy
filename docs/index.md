@@ -18,15 +18,16 @@ Start with [Getting started](getting-started.md), then [Import and clean up a Sc
 ## Write sequences you can read
 
 ```python
+from itchy import control, looks, sensing, sound
 collect_coin: list[Command] = [
     score.add(1),
     collected.set(1),
-    play_sound(collect_sound),
-    hide(),
+    sound.play(collect_sound),
+    looks.hide(),
 ]
 
-watch_for_player = forever(
-    if_(collected.equals(0) & touching(player)).then_(collect_coin),
+watch_for_player = control.forever(
+    control.if_(collected.equals(0) & sensing.touching(player)).then_(collect_coin),
 )
 ```
 

@@ -3,18 +3,20 @@
 Numeric expressions and conditions are separate types. ty rejects using `score > 0` as a movement distance or `score + 1` as an `if_then` condition.
 
 ```python
-from itchy.game import if_, repeat_until
+from itchy import control
+from itchy import move
 
-repeat_until(score >= 3, score.add(1))
+
+control.repeat_until(score >= 3, score.add(1))
 
 decision = (
-    if_(score.equals(3))
-    .then_([move_x(score * 4), score.add(1)])
+    control.if_(score.equals(3))
+    .then_([move.x(score * 4), score.add(1)])
     .else_([score.reset()])
 )
 ```
 
-Branch bodies accept ordinary lists, nested lists, or individual commands. `if_(...).then_(...)` is a complete command without an else branch; `if_(...)` alone is an incomplete builder and ty rejects it in a script. The older `if_then` and `if_else` functions remain available.
+Branch bodies accept ordinary lists, nested lists, or individual commands. `control.if_(...).then_(...)` is a complete command without an else branch; `control.if_(...)` alone is an incomplete builder and ty rejects it in a script. The older `if_then` and `if_else` functions remain available.
 
 ## Numeric reporters
 
@@ -25,36 +27,40 @@ Comparisons `<`, `>`, `<=`, and `>=` generate conditions. Use `.equals(value)` f
 ## Boolean composition
 
 ```python
-if_(key_down(Key.SPACE) & (health > 0)).then_(award_points(1))
+from itchy import control, sensing
+control.if_(sensing.key_down(Key.SPACE) & (health > 0)).then_(award_points(1))
 ```
 
 Use `&`, `|`, and `~` for AND, OR, and NOT. Parenthesize comparisons when composing them. Python `and`, `or`, `not`, `if`, and `while` evaluate at build time; conditions raise an error if coerced to a Python boolean. Avoid Python chained comparisons such as `0 < score < 10`; write `(score > 0) & (score < 10)`.
 
-`random_number(low, high)` generates a random numeric reporter evaluated at runtime. `wait(seconds)` yields for wall-clock time. These are not deterministic under the current headless tick adapter.
+`operators.random_number(low, high)` generates a random numeric reporter evaluated at runtime. `control.wait(seconds)` yields for wall-clock time. These are not deterministic under the current headless tick adapter.
 
-`key_down(Key.RIGHT)` generates a key-state reporter. `touching(sprite)` generates renderer-based collision sensing. A sprite name string, `_edge_`, or `_mouse_` is also accepted; ordinary sprite names are checked during compilation.
+`sensing.key_down(Key.RIGHT)` generates a key-state reporter. `sensing.touching(sprite)` generates renderer-based collision sensing. A sprite name string, `_edge_`, or `_mouse_` is also accepted; ordinary sprite names are checked during compilation.
 
 ## Control sequences
 
 | Builder | Scratch behavior |
 | --- | --- |
-| `if_(condition).then_(steps).else_(other_steps)` | Select a branch using the fluent API |
-| `if_(condition).then_(steps)` | Run a single conditional branch |
-| `if_then(condition, *steps)` | Run the body when true |
-| `if_else(condition, then=steps, otherwise=steps)` | Select a branch |
-| `repeat(count, *steps)` | Repeat a literal or reporter number of times |
-| `repeat_until(condition, *steps)` | Repeat while the condition is false |
-| `forever(*steps)` | Keep repeating until stopped |
+| `control.if_(condition).then_(steps).else_(other_steps)` | Select a branch using the fluent API |
+| `control.if_(condition).then_(steps)` | Run a single conditional branch |
+| `control.if_then(condition, *steps)` | Run the body when true |
+| `control.if_else(condition, then=steps, otherwise=steps)` | Select a branch |
+| `control.repeat(count, *steps)` | Repeat a literal or reporter number of times |
+| `control.repeat_until(condition, *steps)` | Repeat while the condition is false |
+| `control.forever(*steps)` | Keep repeating until stopped |
 
 ## Order initialization with messages
 
 Green-flag scripts run concurrently. Reset shared state before announcing that a round is ready:
 
 ```python
+from itchy import events
+from itchy import move
+
 ready = Message("ready")
 
-on_start(go_to(0, 0), score.reset(), broadcast(ready))
-on_message(ready, prepare_coin, watch_for_player)
+events.on_start(move.to(0, 0), score.reset(), events.broadcast(ready))
+events.on_message(ready, prepare_coin, watch_for_player)
 ```
 
-Declare `ready` in `Game.messages`. `broadcast(ready, wait=True)` waits for receiver scripts to complete; do not wait for a receiver that contains a `forever` loop.
+Declare `ready` in `Game.messages`. `events.broadcast(ready, wait=True)` waits for receiver scripts to complete; do not wait for a receiver that contains a `forever` loop.
