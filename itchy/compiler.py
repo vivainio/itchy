@@ -12,8 +12,8 @@ from itchy.game import (
     NativeCommand, NativeReporter, NativeCondition, Menu, Value, FieldValue,
     StringVariable, ScratchList, Argument, Procedure, ProcedureCall,
     Broadcast, Message, Arithmetic, ChangeVariable, Command, Comparison, Condition, Costume, Forever,
-    Game, GoTo, If, KeyDown, Logic, MoveX, Not, Number, NumberVariable,
-    Repeat, RepeatUntil, SetVariable, Sound, PlaySound, Touching, Visibility, Wait, RandomNumber,
+    Game, GoTo, If, Key, KeyDown, Logic, MoveX, Not, Number, NumberVariable,
+    Repeat, RepeatUntil, SetVariable, Sound, PlaySound, Touching, Visibility, Wait, RandomNumber, ScratchLiteral,
 )
 
 type Json = None | bool | int | float | str | list[Json] | dict[str, Json]
@@ -53,18 +53,20 @@ def compile_game(game: Game) -> bytes:
     names = [sprite.name for sprite in game.sprites]
     if len(set(names)) != len(names) or "Stage" in names:
         raise ValueError("Sprite names must be unique and cannot be Stage")
-    declared = {variable.name: variable for variable in game.variables}
-    if len(declared) != len(game.variables):
-        raise ValueError("Variable names must be unique")
-    for variable in game.variables:
+    all_variables = (*game.variables, *(variable for sprite in game.sprites for variable in sprite.variables),
+                     *((variable for variable in game.stage.variables) if game.stage is not None else ()))
+    if len({variable.name for variable in all_variables}) != len(all_variables) and any(variable.id is None for variable in all_variables):
+        raise ValueError("Variable names must be unique unless explicit Scratch ids are used")
+    declared = {id(variable): variable for variable in all_variables}
+    for variable in all_variables:
         if isinstance(variable, NumberVariable):
             number(variable.initial)
     messages = {message.name: message for message in game.messages}
     if len(messages) != len(game.messages):
         raise ValueError("Message names must be unique")
-    lists = {item.name: item for item in game.lists}
-    if len(lists) != len(game.lists):
-        raise ValueError("List names must be unique")
+    all_lists = (*game.lists, *(item for sprite in game.sprites for item in sprite.lists),
+                 *((item for item in game.stage.lists) if game.stage is not None else ()))
+    lists = {id(item): item for item in all_lists}
     assets: dict[str, bytes] = {}
 
     def costume(source: Costume, name: str) -> dict[str, Json]:
@@ -81,8 +83,9 @@ def compile_game(game: Game) -> bytes:
         asset_id = md5(data).hexdigest()
         assets[f"{asset_id}.{extension}"] = data
         return {
-            "name": name, "assetId": asset_id, "md5ext": f"{asset_id}.{extension}",
-            "dataFormat": extension, "rotationCenterX": source.center_x,
+            "name": source.name or name, "assetId": asset_id, "md5ext": f"{asset_id}.{extension}",
+            "dataFormat": extension, "bitmapResolution": source.bitmap_resolution,
+            "rotationCenterX": source.center_x,
             "rotationCenterY": source.center_y,
         }
 
@@ -93,13 +96,17 @@ def compile_game(game: Game) -> bytes:
             raise ValueError(f"Unsupported sound format: {extension}")
         rate, sample_count = source.rate, source.sample_count
         if extension == "wav":
-            with wave.open(BytesIO(data)) as audio:
-                rate, sample_count = audio.getframerate(), audio.getnframes()
+            try:
+                with wave.open(BytesIO(data)) as audio:
+                    rate, sample_count = audio.getframerate(), audio.getnframes()
+            except wave.Error:
+                # Scratch archives may contain compressed WAV variants such as ADPCM.
+                pass
         asset_id = md5(data).hexdigest()
         assets[f"{asset_id}.{extension}"] = data
         return {"name": source.name, "assetId": asset_id,
                 "md5ext": f"{asset_id}.{extension}", "dataFormat": extension,
-                "format": "", "rate": rate, "sampleCount": sample_count}
+                "format": source.format, "rate": rate, "sampleCount": sample_count}
 
     base: dict[str, Json] = {
         "lists": {}, "broadcasts": {}, "comments": {},
@@ -111,12 +118,12 @@ def compile_game(game: Game) -> bytes:
     )
     targets: list[Json] = [{
         **base, "isStage": True, "name": "Stage",
-        "variables": {f"var:{v.name}": [v.name, v.initial] for v in game.variables},
-        "broadcasts": {f"message:{m.name}": m.name for m in game.messages},
-        "lists": {f"list:{item.name}": [item.name, list(item.initial)] for item in game.lists},
+        "variables": {v.id or f"var:{v.name}": [v.name, v.initial] for v in game.variables},
+        "broadcasts": {m.id or f"message:{m.name}": m.name for m in game.messages},
+        "lists": {item.id or f"list:{item.name}": [item.name, list(item.initial)] for item in game.lists},
         "blocks": {}, "costumes": [costume(background, "Background")],
-        "tempo": 60, "videoTransparency": 50, "videoState": "on",
-        "textToSpeechLanguage": None,
+        "tempo": game.tempo, "videoTransparency": game.video_transparency, "videoState": game.video_state,
+        "textToSpeechLanguage": game.text_to_speech_language,
     }]
     for sprite in (*game.sprites, *((game.stage,) if game.stage is not None else ())):
         is_stage = sprite is game.stage
@@ -128,24 +135,27 @@ def compile_game(game: Game) -> bytes:
         def add(
             opcode: str, parent: str | None,
             inputs: dict[str, Json] | None = None,
-            fields: dict[str, Json] | None = None, *, top_level: bool = False,
+            fields: dict[str, Json] | None = None, *, top_level: bool | None = None,
         ) -> str:
             block_id = f"b{len(blocks) + 1}"
-            blocks[block_id] = Block(opcode, parent, inputs or {}, fields or {}, top_level=top_level)
+            blocks[block_id] = Block(
+                opcode, parent, inputs or {}, fields or {},
+                top_level=parent is None if top_level is None else top_level,
+            )
             return block_id
 
         def message_fields(message: Message, field: str) -> dict[str, Json]:
             if messages.get(message.name) is not message:
                 raise ValueError(f"Undeclared message: {message.name}")
-            return {field: [message.name, f"message:{message.name}"]}
+            return {field: [message.name, message.id or f"message:{message.name}"]}
 
         def variable_fields(variable: NumberVariable | StringVariable) -> dict[str, Json]:
-            if declared.get(variable.name) is not variable:
+            if declared.get(id(variable)) is not variable:
                 raise ValueError(f"Undeclared variable: {variable.name}")
-            return {"VARIABLE": [variable.name, f"var:{variable.name}"]}
+            return {"VARIABLE": [variable.name, variable.id or f"var:{variable.name}"]}
 
         procedures = {id(proc): proc for proc in sprite.procedures}
-        if len({proc.name for proc in sprite.procedures}) != len(sprite.procedures):
+        if len({proc.proccode or proc.name for proc in sprite.procedures}) != len(sprite.procedures):
             raise ValueError("Procedure names must be unique per sprite")
         active_procedure: Procedure | None = None
 
@@ -155,9 +165,9 @@ def compile_game(game: Game) -> bytes:
                 if isinstance(value, (NumberVariable, StringVariable)):
                     result[key] = variable_fields(value)["VARIABLE"]
                 elif isinstance(value, ScratchList):
-                    if lists.get(value.name) is not value:
+                    if lists.get(id(value)) is not value:
                         raise ValueError(f"Undeclared list: {value.name}")
-                    result[key] = [value.name, f"list:{value.name}"]
+                    result[key] = [value.name, value.id or f"list:{value.name}"]
                 else:
                     result[key] = [value, None]
             return result
@@ -167,15 +177,22 @@ def compile_game(game: Game) -> bytes:
 
         def value_input(value: Value | Menu, parent: str) -> list[Json]:
             if isinstance(value, Menu):
-                menu = add(value.opcode, parent, fields={value.field: [value.value, None]})
+                menu = add(value.opcode, parent, fields={value.field: [value.value, value.id]})
                 blocks[menu].shadow = True
                 return [1, menu]
+            if isinstance(value, ScratchLiteral):
+                literal: list[Json] = [value.type, value.value]
+                if value.id is not None:
+                    literal.append(value.id)
+                return [1, literal]
             if isinstance(value, str):
                 return [1, [10, value]]
             if isinstance(value, (NativeReporter, NativeCondition)):
                 node = add(value.opcode, parent, fields=native_fields(value.fields))
                 blocks[node].inputs = native_inputs(value.inputs, node)
                 return [2, node] if isinstance(value, NativeCondition) else [3, node, [10, ""]]
+            if isinstance(value, Condition):
+                return condition(value, parent)
             if isinstance(value, StringVariable):
                 node = add("data_variable", parent, fields=variable_fields(value))
                 return [3, node, [10, ""]]
@@ -183,7 +200,7 @@ def compile_game(game: Game) -> bytes:
                 node = add("data_listcontents", parent, fields=native_fields({"LIST": value}))
                 return [3, node, [10, ""]]
             if isinstance(value, Argument):
-                if active_procedure is None or not any(value is arg for arg in active_procedure.arguments):
+                if not value.imported and (active_procedure is None or not any(value is arg for arg in active_procedure.arguments)):
                     raise ValueError(f"Argument outside its procedure: {value.name}")
                 node = add("argument_reporter_boolean" if value.boolean else "argument_reporter_string_number",
                            parent, fields={"VALUE": [value.name, None]})
@@ -195,18 +212,29 @@ def compile_game(game: Game) -> bytes:
         def procedure_mutation(proc: Procedure, *, prototype: bool = False) -> dict[str, Json]:
             result: dict[str, Json] = {
                 "tagName": "mutation", "children": [],
-                "proccode": proc.name + "".join(" %b" if arg.boolean else " %s" for arg in proc.arguments),
-                "argumentids": json.dumps([f"arg:{i}" for i in range(len(proc.arguments))]),
+                "proccode": proc.proccode or proc.name + "".join(" %b" if arg.boolean else " %s" for arg in proc.arguments),
+                "argumentids": json.dumps(proc.argument_ids or [f"arg:{i}" for i in range(len(proc.arguments))]),
                 "warp": "true" if proc.warp else "false",
             }
             if prototype:
                 result["argumentnames"] = json.dumps([arg.name for arg in proc.arguments])
-                result["argumentdefaults"] = json.dumps([False if arg.boolean else "" for arg in proc.arguments])
+                result["argumentdefaults"] = json.dumps(
+                    proc.argument_defaults or [False if arg.boolean else "" for arg in proc.arguments]
+                )
             return result
 
         def numeric(value: Number, parent: str) -> list[Json]:
             if isinstance(value, (NativeReporter, Argument)):
                 return value_input(value, parent)
+            if isinstance(value, NativeCondition):
+                return value_input(value, parent)
+            if isinstance(value, Condition):
+                return condition(value, parent)
+            if isinstance(value, ScratchLiteral):
+                literal: list[Json] = [value.type, value.value]
+                if value.id is not None:
+                    literal.append(value.id)
+                return [1, literal]
             if isinstance(value, bool):
                 raise TypeError("Boolean literals are not game numbers")
             if isinstance(value, (int, float)):
@@ -227,8 +255,13 @@ def compile_game(game: Game) -> bytes:
             return [3, reporter, [4, "0"]]
 
         def condition(value: Condition, parent: str) -> list[Json]:
-            if isinstance(value, NativeCondition):
+            if isinstance(value, (NativeCondition, NativeReporter, Argument, ScratchLiteral,
+                                  NumberVariable, StringVariable, ScratchList, str)):
                 return value_input(value, parent)
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                return number(value)
+            if isinstance(value, (Arithmetic, RandomNumber)):
+                return numeric(value, parent)
             match value:
                 case Comparison(operator, left, right):
                     reporter = add(f"operator_{operator}", parent)
@@ -245,7 +278,8 @@ def compile_game(game: Game) -> bytes:
                     blocks[reporter].inputs = {"OPERAND": condition(operand, reporter)}
                 case KeyDown(key):
                     reporter = add("sensing_keypressed", parent)
-                    menu = add("sensing_keyoptions", reporter, fields={"KEY_OPTION": [key.value, None]})
+                    key_value = key.value if isinstance(key, Key) else key
+                    menu = add("sensing_keyoptions", reporter, fields={"KEY_OPTION": [key_value, None]})
                     blocks[menu].shadow = True
                     blocks[reporter].inputs = {"KEY_OPTION": [1, menu]}
                 case Touching(target):
@@ -264,7 +298,7 @@ def compile_game(game: Game) -> bytes:
             if first:
                 blocks[block_id].inputs[name] = [2, first]
 
-        def sequence(commands: tuple[Command, ...], parent: str) -> str | None:
+        def sequence(commands: tuple[Command, ...], parent: str | None) -> str | None:
             first: str | None = None
             previous: str | None = None
             for command in commands:
@@ -358,6 +392,9 @@ def compile_game(game: Game) -> bytes:
             active_procedure = None
 
         for script in sprite.scripts:
+            if script.detached:
+                sequence(script.body, None)
+                continue
             if script.event is not None:
                 hat = add(script.event.opcode, None, fields=native_fields(script.event.fields), top_level=True)
                 blocks[hat].inputs = native_inputs(script.event.inputs, hat)
@@ -368,27 +405,38 @@ def compile_game(game: Game) -> bytes:
             elif script.key is None:
                 hat = add("event_whenflagclicked", None, top_level=True)
             else:
-                hat = add("event_whenkeypressed", None, fields={"KEY_OPTION": [script.key.value, None]}, top_level=True)
+                key_value = script.key.value if isinstance(script.key, Key) else script.key
+                hat = add("event_whenkeypressed", None, fields={"KEY_OPTION": [key_value, None]}, top_level=True)
             blocks[hat].next = sequence(script.body, hat)
         target: dict[str, Json] = {
-            **base, "isStage": False, "name": sprite.name, "variables": {},
+            **base, "isStage": False, "name": sprite.name,
+            "variables": {v.id or f"var:{v.name}": [v.name, v.initial] for v in sprite.variables},
+            "lists": {item.id or f"list:{item.name}": [item.name, list(item.initial)] for item in sprite.lists},
             "blocks": {key: block.json(i) for i, (key, block) in enumerate(blocks.items(), 1)},
-            "costumes": [costume(c, "Default" if i == 0 else f"Costume {i + 1}") for i, c in enumerate((sprite.costume, *sprite.costumes))],
+            "costumes": [costume(c, c.name or ("Default" if i == 0 else f"Costume {i + 1}")) for i, c in enumerate((sprite.costume, *sprite.costumes))],
             "sounds": [sound(s) for s in sprite.sounds],
-            "x": sprite.x, "y": sprite.y, "size": 100, "direction": 90,
-            "visible": True, "draggable": False, "rotationStyle": "all around",
-            "layerOrder": len(targets),
+            "x": sprite.x, "y": sprite.y, "size": sprite.size, "direction": sprite.direction,
+            "visible": sprite.visible, "draggable": sprite.draggable, "rotationStyle": sprite.rotation_style,
+            "currentCostume": sprite.current_costume,
+            "volume": sprite.volume,
+            "layerOrder": sprite.layer_order if sprite.layer_order is not None else len(targets),
         }
         if is_stage:
+            target.update(
+                tempo=game.tempo, videoTransparency=game.video_transparency,
+                videoState=game.video_state, textToSpeechLanguage=game.text_to_speech_language,
+            )
             stage = targets[0]
             assert isinstance(stage, dict)
-            for key in ("blocks", "costumes", "sounds"):
-                stage[key] = target[key]
+            for key in ("blocks", "costumes", "sounds", "currentCostume", "volume", "lists", "tempo",
+                        "videoTransparency", "videoState", "textToSpeechLanguage"):
+                if key != "lists" or sprite.lists:
+                    stage[key] = target[key]
         else:
             targets.append(target)
     project: dict[str, Json] = {
-        "targets": targets, "monitors": [], "extensions": list(game.extensions),
-        "meta": {"semver": "3.0.0", "vm": "0.2.0", "agent": "itchy"},
+        "targets": targets, "monitors": list(game.monitors), "extensions": list(game.extensions),
+        "meta": game.meta or {"semver": "3.0.0", "vm": "0.2.0", "agent": "itchy"},
     }
     assets["project.json"] = json.dumps(project, allow_nan=False).encode()
     output = BytesIO()

@@ -22,6 +22,33 @@ class Key(StrEnum):
 
 
 class Condition:
+    def equals(self, other: Value) -> Condition:
+        return predicate("operator_equals", inputs={"OPERAND1": self, "OPERAND2": other})
+
+    def __add__(self, other: Number) -> NumberExpression:
+        return Arithmetic("add", self, other)
+
+    def __radd__(self, other: Number) -> NumberExpression:
+        return Arithmetic("add", other, self)
+
+    def __sub__(self, other: Number) -> NumberExpression:
+        return Arithmetic("subtract", self, other)
+
+    def __rsub__(self, other: Number) -> NumberExpression:
+        return Arithmetic("subtract", other, self)
+
+    def __mul__(self, other: Number) -> NumberExpression:
+        return Arithmetic("multiply", self, other)
+
+    def __rmul__(self, other: Number) -> NumberExpression:
+        return Arithmetic("multiply", other, self)
+
+    def __truediv__(self, other: Number) -> NumberExpression:
+        return Arithmetic("divide", self, other)
+
+    def __rtruediv__(self, other: Number) -> NumberExpression:
+        return Arithmetic("divide", other, self)
+
     def __and__(self, other: Condition) -> Condition:
         return Logic("and", self, other)
 
@@ -129,7 +156,7 @@ class Not(Condition):
 
 @dataclass(frozen=True, eq=False)
 class KeyDown(Condition):
-    key: Key
+    key: Key | str
 
 
 @dataclass(frozen=True, eq=False)
@@ -137,7 +164,7 @@ class Touching(Condition):
     target: str
 
 
-def key_down(key: Key) -> Condition:
+def key_down(key: Key | str) -> Condition:
     return KeyDown(key)
 
 
@@ -149,6 +176,7 @@ def touching(target: Sprite | str) -> Condition:
 class NumberVariable(NumberExpression):
     name: str
     initial: float = 0
+    id: str | None = None
 
     def set(self, value: Number) -> SetVariable:
         return SetVariable(self, value)
@@ -158,6 +186,12 @@ class NumberVariable(NumberExpression):
 
     def reset(self) -> SetVariable:
         return self.set(self.initial)
+
+    def show(self) -> NativeCommand:
+        return block("data_showvariable", fields={"VARIABLE": self})
+
+    def hide(self) -> NativeCommand:
+        return block("data_hidevariable", fields={"VARIABLE": self})
 
 
 @dataclass(frozen=True)
@@ -248,6 +282,7 @@ def flatten(steps: tuple[Steps, ...]) -> tuple[Command, ...]:
 @dataclass(frozen=True)
 class Message:
     name: str
+    id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -266,11 +301,12 @@ def on_message(message: Message, *steps: Steps) -> Script:
 
 @dataclass(frozen=True)
 class Script:
-    key: Key | None
+    key: Key | str | None
     body: tuple[Command, ...]
     message: Message | None = None
     clicked: bool = False
     event: NativeCommand | None = None
+    detached: bool = False
 
 
 @dataclass(frozen=True)
@@ -278,6 +314,8 @@ class Costume:
     svg: str | Path
     center_x: float = 20
     center_y: float = 20
+    name: str = ""
+    bitmap_resolution: float = 1
 
 
 @dataclass(frozen=True)
@@ -286,6 +324,7 @@ class Sound:
     source: Path
     rate: int = 0
     sample_count: int = 0
+    format: str = ""
 
 
 @dataclass(frozen=True)
@@ -294,8 +333,10 @@ class PlaySound:
     wait: bool = False
 
 
-def play_sound(sound: Sound, *, wait: bool = False) -> PlaySound:
-    return PlaySound(sound, wait)
+def play_sound(sound: Sound | Value | Menu, *, wait: bool = False) -> PlaySound | NativeCommand:
+    if isinstance(sound, Sound):
+        return PlaySound(sound, wait)
+    return block("sound_playuntildone" if wait else "sound_play", inputs={"SOUND_MENU": sound})
 
 
 @dataclass(frozen=True)
@@ -308,6 +349,16 @@ class Sprite:
     sounds: tuple[Sound, ...] = ()
     costumes: tuple[Costume, ...] = ()
     procedures: tuple[Procedure, ...] = ()
+    variables: tuple[NumberVariable | StringVariable, ...] = ()
+    lists: tuple[ScratchList, ...] = ()
+    size: float = 100
+    direction: float = 90
+    visible: bool = True
+    current_costume: int = 0
+    rotation_style: str = "all around"
+    draggable: bool = False
+    layer_order: int | None = None
+    volume: float = 100
 
 
 @dataclass(frozen=True)
@@ -319,13 +370,19 @@ class Game:
     lists: tuple[ScratchList, ...] = ()
     extensions: tuple[str, ...] = ()
     stage: Sprite | None = None
+    monitors: tuple[dict[str, object], ...] = ()
+    meta: dict[str, object] | None = None
+    tempo: float = 60
+    video_transparency: float = 50
+    video_state: str = "on"
+    text_to_speech_language: str | None = None
 
 
 def on_start(*steps: Steps) -> Script:
     return Script(None, flatten(steps))
 
 
-def on_key(key: Key, *steps: Steps) -> Script:
+def on_key(key: Key | str, *steps: Steps) -> Script:
     return Script(key, flatten(steps))
 
 
@@ -384,8 +441,15 @@ def on_click(*steps: Steps) -> Script:
     return Script(None, flatten(steps), clicked=True)
 
 
+@dataclass(frozen=True, eq=False)
+class ScratchLiteral(NumberExpression):
+    type: int
+    value: str
+    id: str | None = None
+
+
 # Native blocks use the input/field names from Scratch's block definitions.
-type Value = str | Number | Condition | StringVariable | NativeReporter | NativeCondition | Argument | ScratchList
+type Value = str | Number | Condition | StringVariable | NativeReporter | NativeCondition | Argument | ScratchList | ScratchLiteral
 type FieldValue = str | NumberVariable | StringVariable | ScratchList
 
 
@@ -394,6 +458,7 @@ class Menu:
     opcode: str
     field: str
     value: str
+    id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -438,22 +503,33 @@ def on_event(event: NativeCommand, *steps: Steps) -> Script:
     return Script(None, flatten(steps), event=event)
 
 
-@dataclass(frozen=True, eq=False)
+@dataclass(eq=False)
 class StringVariable:
     name: str
     initial: str = ""
+    id: str | None = None
 
     def set(self, value: Value) -> NativeCommand:
         return block("data_setvariableto", inputs={"VALUE": value}, fields={"VARIABLE": self})
 
+    def add(self, value: Number) -> NativeCommand:
+        return block("data_changevariableby", inputs={"VALUE": value}, fields={"VARIABLE": self})
+
     def equals(self, value: Value) -> NativeCondition:
         return predicate("operator_equals", inputs={"OPERAND1": self, "OPERAND2": value})
+
+    def show(self) -> NativeCommand:
+        return block("data_showvariable", fields={"VARIABLE": self})
+
+    def hide(self) -> NativeCommand:
+        return block("data_hidevariable", fields={"VARIABLE": self})
 
 
 @dataclass(frozen=True, eq=False)
 class ScratchList:
     name: str
     initial: tuple[str | float, ...] = ()
+    id: str | None = None
 
     def append(self, value: Value) -> NativeCommand:
         return block("data_addtolist", inputs={"ITEM": value}, fields={"LIST": self})
@@ -482,19 +558,29 @@ class ScratchList:
     def contains(self, value: Value) -> NativeCondition:
         return predicate("data_listcontainsitem", inputs={"ITEM": value}, fields={"LIST": self})
 
+    def show(self) -> NativeCommand:
+        return block("data_showlist", fields={"LIST": self})
+
+    def hide(self) -> NativeCommand:
+        return block("data_hidelist", fields={"LIST": self})
+
 
 @dataclass(frozen=True, eq=False)
 class Argument(NumberExpression):
     name: str
     boolean: bool = False
+    imported: bool = False
 
 
-@dataclass(frozen=True, eq=False)
+@dataclass(eq=False)
 class Procedure:
     name: str
     arguments: tuple[Argument, ...] = ()
     body: tuple[Command, ...] = ()
     warp: bool = False
+    proccode: str | None = None
+    argument_ids: tuple[str, ...] = ()
+    argument_defaults: tuple[object, ...] = ()
 
     def __call__(self, *values: Value) -> ProcedureCall:
         if len(values) != len(self.arguments):
@@ -518,6 +604,10 @@ def move_y(distance: Number) -> NativeCommand:
 
 def turn(degrees: Number) -> NativeCommand:
     return block("motion_turnright", inputs={"DEGREES": degrees})
+
+
+def turn_left(degrees: Number) -> NativeCommand:
+    return block("motion_turnleft", inputs={"DEGREES": degrees})
 
 
 def point_direction(direction: Number) -> NativeCommand:
@@ -550,8 +640,9 @@ def think(message: Value, seconds: Number | None = None) -> NativeCommand:
                  inputs={"MESSAGE": message} if seconds is None else {"MESSAGE": message, "SECS": seconds})
 
 
-def switch_costume(name: str) -> NativeCommand:
-    return block("looks_switchcostumeto", inputs={"COSTUME": Menu("looks_costume", "COSTUME", name)})
+def switch_costume(name: Value | Menu) -> NativeCommand:
+    costume = Menu("looks_costume", "COSTUME", name) if isinstance(name, str) else name
+    return block("looks_switchcostumeto", inputs={"COSTUME": costume})
 
 
 def next_costume() -> NativeCommand:
@@ -562,8 +653,9 @@ def set_size(size: Number) -> NativeCommand:
     return block("looks_setsizeto", inputs={"SIZE": size})
 
 
-def clone(target: Sprite | str = "_myself_") -> NativeCommand:
-    return block("control_create_clone_of", inputs={"CLONE_OPTION": Menu("control_create_clone_of_menu", "CLONE_OPTION", target.name if isinstance(target, Sprite) else target)})
+def clone(target: Sprite | str | Value | Menu = "_myself_") -> NativeCommand:
+    clone_target = Menu("control_create_clone_of_menu", "CLONE_OPTION", target.name if isinstance(target, Sprite) else target) if isinstance(target, (Sprite, str)) else target
+    return block("control_create_clone_of", inputs={"CLONE_OPTION": clone_target})
 
 
 def delete_clone() -> NativeCommand:
@@ -590,12 +682,14 @@ def contains(text: Value, part: Value) -> NativeCondition:
     return predicate("operator_contains", inputs={"STRING1": text, "STRING2": part})
 
 
-def go_to_target(target: Sprite | str) -> NativeCommand:
-    return block("motion_goto", inputs={"TO": Menu("motion_goto_menu", "TO", target.name if isinstance(target, Sprite) else target)})
+def go_to_target(target: Sprite | str | Value | Menu) -> NativeCommand:
+    destination = Menu("motion_goto_menu", "TO", target.name if isinstance(target, Sprite) else target) if isinstance(target, (Sprite, str)) else target
+    return block("motion_goto", inputs={"TO": destination})
 
 
-def point_towards(target: Sprite | str) -> NativeCommand:
-    return block("motion_pointtowards", inputs={"TOWARDS": Menu("motion_pointtowards_menu", "TOWARDS", target.name if isinstance(target, Sprite) else target)})
+def point_towards(target: Sprite | str | Value | Menu) -> NativeCommand:
+    destination = Menu("motion_pointtowards_menu", "TOWARDS", target.name if isinstance(target, Sprite) else target) if isinstance(target, (Sprite, str)) else target
+    return block("motion_pointtowards", inputs={"TOWARDS": destination})
 
 
 def rotation_style(style: Literal["all around", "left-right", "don't rotate"]) -> NativeCommand:
@@ -686,13 +780,62 @@ def round_number(value: Number) -> NativeReporter:
     return reporter("operator_round", inputs={"NUM": value})
 
 
+def math_op(operation: str, value: Number) -> NativeReporter:
+    return reporter("operator_mathop", inputs={"NUM": value}, fields={"OPERATOR": operation})
+
+
+def stamp() -> NativeCommand:
+    return block("pen_stamp")
+
+
+def pen_up() -> NativeCommand:
+    return block("pen_penUp")
+
+
+def pen_down() -> NativeCommand:
+    return block("pen_penDown")
+
+
+def clear_pen() -> NativeCommand:
+    return block("pen_clear")
+
+
+def set_pen_size(size: Number) -> NativeCommand:
+    return block("pen_setPenSizeTo", inputs={"SIZE": size})
+
+
+def set_pen_color(color: Value) -> NativeCommand:
+    return block("pen_setPenColorToColor", inputs={"COLOR": color})
+
+
+def set_pen_color_param(parameter: str, value: Number) -> NativeCommand:
+    return block("pen_setPenColorParamTo", inputs={"VALUE": value}, fields={"COLOR_PARAM": parameter})
+
+
+def costume_number_or_name(mode: str) -> NativeReporter:
+    return reporter("looks_costumenumbername", fields={"NUMBER_NAME": mode})
+
+
+def set_drag_mode(mode: str) -> NativeCommand:
+    return block("sensing_setdragmode", fields={"DRAG_MODE": mode})
+
+
+def property_of(target: Value | Menu, property_name: str) -> NativeReporter:
+    return reporter("sensing_of", inputs={"OBJECT": target}, fields={"PROPERTY": property_name})
+
+
+def round_number(value: Number) -> NativeReporter:
+    return reporter("operator_round", inputs={"NUM": value})
+
+
 def math_function(function: str, value: Number) -> NativeReporter:
     return reporter("operator_mathop", inputs={"NUM": value}, fields={"OPERATOR": function})
 
 
-def switch_backdrop(name: str, *, wait: bool = False) -> NativeCommand:
+def switch_backdrop(name: Value | Menu, *, wait: bool = False) -> NativeCommand:
+    backdrop = Menu("looks_backdrops", "BACKDROP", name) if isinstance(name, str) else name
     return block("looks_switchbackdroptoandwait" if wait else "looks_switchbackdropto",
-                 inputs={"BACKDROP": Menu("looks_backdrops", "BACKDROP", name)})
+                 inputs={"BACKDROP": backdrop})
 
 
 def next_backdrop() -> NativeCommand:

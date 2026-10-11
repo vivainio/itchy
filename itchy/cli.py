@@ -2,6 +2,7 @@ import argparse
 import subprocess
 import sys
 from pathlib import Path
+from itchy.importer import import_project
 from itchy.project import init_project
 
 from itchy import build, server
@@ -13,6 +14,9 @@ def main() -> None:
     commands = parser.add_subparsers(dest="command", required=True)
     init = commands.add_parser("init", help="Create a starter game in an empty directory")
     init.add_argument("directory", nargs="?", default=".")
+    imported = commands.add_parser("import", help="Translate a Scratch .sb3 project into Python")
+    imported.add_argument("project", type=Path, help="Scratch project to import")
+    imported.add_argument("directory", nargs="?", help="Destination directory (defaults to the current directory)")
     run = commands.add_parser("run", help="Set up, build, serve, and open the local Scratch player")
     run.add_argument("--port", type=int, default=4317)
     run.add_argument("--no-open", action="store_true", help="Start the server without opening a browser")
@@ -30,6 +34,11 @@ def main() -> None:
             try:
                 init_project(Path(args.directory))
             except ValueError as error:
+                parser.error(str(error))
+        case "import":
+            try:
+                import_project(args.project, Path(args.directory or "."))
+            except (FileNotFoundError, ValueError) as error:
                 parser.error(str(error))
         case "run": server.serve(port=args.port, open_browser=not args.no_open)
         case "build": build.main()
