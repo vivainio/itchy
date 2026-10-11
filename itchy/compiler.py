@@ -9,6 +9,8 @@ from typing import assert_never
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 from itchy.game import (
+    NativeCommand, NativeReporter, NativeCondition, Menu, Value, FieldValue,
+    StringVariable, ScratchList, Argument, Procedure, ProcedureCall,
     Broadcast, Message, Arithmetic, ChangeVariable, Command, Comparison, Condition, Costume, Forever,
     Game, GoTo, If, KeyDown, Logic, MoveX, Not, Number, NumberVariable,
     Repeat, RepeatUntil, SetVariable, Sound, PlaySound, Touching, Visibility, Wait, RandomNumber,
@@ -32,6 +34,7 @@ class Block:
     next: str | None = None
     top_level: bool = False
     shadow: bool = False
+    mutation: dict[str, Json] | None = None
 
     def json(self, index: int) -> dict[str, Json]:
         result: dict[str, Json] = {
@@ -39,6 +42,8 @@ class Block:
             "inputs": self.inputs, "fields": self.fields,
             "shadow": self.shadow, "topLevel": self.top_level,
         }
+        if self.mutation is not None:
+            result["mutation"] = self.mutation
         if self.top_level:
             result.update(x=40, y=index * 80)
         return result
@@ -52,10 +57,14 @@ def compile_game(game: Game) -> bytes:
     if len(declared) != len(game.variables):
         raise ValueError("Variable names must be unique")
     for variable in game.variables:
-        number(variable.initial)
+        if isinstance(variable, NumberVariable):
+            number(variable.initial)
     messages = {message.name: message for message in game.messages}
     if len(messages) != len(game.messages):
         raise ValueError("Message names must be unique")
+    lists = {item.name: item for item in game.lists}
+    if len(lists) != len(game.lists):
+        raise ValueError("List names must be unique")
     assets: dict[str, bytes] = {}
 
     def costume(source: Costume, name: str) -> dict[str, Json]:
@@ -104,11 +113,13 @@ def compile_game(game: Game) -> bytes:
         **base, "isStage": True, "name": "Stage",
         "variables": {f"var:{v.name}": [v.name, v.initial] for v in game.variables},
         "broadcasts": {f"message:{m.name}": m.name for m in game.messages},
+        "lists": {f"list:{item.name}": [item.name, list(item.initial)] for item in game.lists},
         "blocks": {}, "costumes": [costume(background, "Background")],
         "tempo": 60, "videoTransparency": 50, "videoState": "on",
         "textToSpeechLanguage": None,
     }]
-    for sprite in game.sprites:
+    for sprite in (*game.sprites, *((game.stage,) if game.stage is not None else ())):
+        is_stage = sprite is game.stage
         blocks: dict[str, Block] = {}
         sound_names = [sound.name for sound in sprite.sounds]
         if len(set(sound_names)) != len(sound_names):
@@ -128,12 +139,74 @@ def compile_game(game: Game) -> bytes:
                 raise ValueError(f"Undeclared message: {message.name}")
             return {field: [message.name, f"message:{message.name}"]}
 
-        def variable_fields(variable: NumberVariable) -> dict[str, Json]:
+        def variable_fields(variable: NumberVariable | StringVariable) -> dict[str, Json]:
             if declared.get(variable.name) is not variable:
                 raise ValueError(f"Undeclared variable: {variable.name}")
             return {"VARIABLE": [variable.name, f"var:{variable.name}"]}
 
+        procedures = {id(proc): proc for proc in sprite.procedures}
+        if len({proc.name for proc in sprite.procedures}) != len(sprite.procedures):
+            raise ValueError("Procedure names must be unique per sprite")
+        active_procedure: Procedure | None = None
+
+        def native_fields(fields: dict[str, FieldValue]) -> dict[str, Json]:
+            result: dict[str, Json] = {}
+            for key, value in fields.items():
+                if isinstance(value, (NumberVariable, StringVariable)):
+                    result[key] = variable_fields(value)["VARIABLE"]
+                elif isinstance(value, ScratchList):
+                    if lists.get(value.name) is not value:
+                        raise ValueError(f"Undeclared list: {value.name}")
+                    result[key] = [value.name, f"list:{value.name}"]
+                else:
+                    result[key] = [value, None]
+            return result
+
+        def native_inputs(inputs: dict[str, Value | Menu], parent: str) -> dict[str, Json]:
+            return {key: value_input(value, parent) for key, value in inputs.items()}
+
+        def value_input(value: Value | Menu, parent: str) -> list[Json]:
+            if isinstance(value, Menu):
+                menu = add(value.opcode, parent, fields={value.field: [value.value, None]})
+                blocks[menu].shadow = True
+                return [1, menu]
+            if isinstance(value, str):
+                return [1, [10, value]]
+            if isinstance(value, (NativeReporter, NativeCondition)):
+                node = add(value.opcode, parent, fields=native_fields(value.fields))
+                blocks[node].inputs = native_inputs(value.inputs, node)
+                return [2, node] if isinstance(value, NativeCondition) else [3, node, [10, ""]]
+            if isinstance(value, StringVariable):
+                node = add("data_variable", parent, fields=variable_fields(value))
+                return [3, node, [10, ""]]
+            if isinstance(value, ScratchList):
+                node = add("data_listcontents", parent, fields=native_fields({"LIST": value}))
+                return [3, node, [10, ""]]
+            if isinstance(value, Argument):
+                if active_procedure is None or not any(value is arg for arg in active_procedure.arguments):
+                    raise ValueError(f"Argument outside its procedure: {value.name}")
+                node = add("argument_reporter_boolean" if value.boolean else "argument_reporter_string_number",
+                           parent, fields={"VALUE": [value.name, None]})
+                return [2, node] if value.boolean else [3, node, [10, ""]]
+            if isinstance(value, Condition):
+                return condition(value, parent)
+            return numeric(value, parent)
+
+        def procedure_mutation(proc: Procedure, *, prototype: bool = False) -> dict[str, Json]:
+            result: dict[str, Json] = {
+                "tagName": "mutation", "children": [],
+                "proccode": proc.name + "".join(" %b" if arg.boolean else " %s" for arg in proc.arguments),
+                "argumentids": json.dumps([f"arg:{i}" for i in range(len(proc.arguments))]),
+                "warp": "true" if proc.warp else "false",
+            }
+            if prototype:
+                result["argumentnames"] = json.dumps([arg.name for arg in proc.arguments])
+                result["argumentdefaults"] = json.dumps([False if arg.boolean else "" for arg in proc.arguments])
+            return result
+
         def numeric(value: Number, parent: str) -> list[Json]:
+            if isinstance(value, (NativeReporter, Argument)):
+                return value_input(value, parent)
             if isinstance(value, bool):
                 raise TypeError("Boolean literals are not game numbers")
             if isinstance(value, (int, float)):
@@ -154,11 +227,13 @@ def compile_game(game: Game) -> bytes:
             return [3, reporter, [4, "0"]]
 
         def condition(value: Condition, parent: str) -> list[Json]:
+            if isinstance(value, NativeCondition):
+                return value_input(value, parent)
             match value:
                 case Comparison(operator, left, right):
                     reporter = add(f"operator_{operator}", parent)
                     blocks[reporter].inputs = {
-                        "OPERAND1": numeric(left, reporter), "OPERAND2": numeric(right, reporter),
+                        "OPERAND1": value_input(left, reporter), "OPERAND2": value_input(right, reporter),
                     }
                 case Logic(operator, left, right):
                     reporter = add(f"operator_{operator}", parent)
@@ -195,6 +270,21 @@ def compile_game(game: Game) -> bytes:
             for command in commands:
                 owner = previous or parent
                 match command:
+                    case NativeCommand():
+                        block_id = add(command.opcode, owner, fields=native_fields(command.fields))
+                        blocks[block_id].inputs = native_inputs(command.inputs, block_id)
+                        if command.opcode == "control_stop":
+                            blocks[block_id].mutation = {"tagName": "mutation", "children": [], "hasnext": "true" if command.fields.get("STOP_OPTION") == "other scripts in sprite" else "false"}
+                        for name, body in command.substacks.items():
+                            substack(block_id, name, body)
+                    case ProcedureCall(proc, values):
+                        if id(proc) not in procedures:
+                            raise ValueError(f"Undeclared procedure: {proc.name}")
+                        if len(values) != len(proc.arguments):
+                            raise ValueError(f"Wrong argument count: {proc.name}")
+                        block_id = add("procedures_call", owner)
+                        blocks[block_id].mutation = procedure_mutation(proc)
+                        blocks[block_id].inputs = {f"arg:{i}": value_input(value, block_id) for i, value in enumerate(values)}
                     case GoTo(x, y):
                         block_id = add("motion_gotoxy", owner)
                         blocks[block_id].inputs = {"X": numeric(x, block_id), "Y": numeric(y, block_id)}
@@ -206,9 +296,10 @@ def compile_game(game: Game) -> bytes:
                         block_id = add(opcode, owner, fields=variable_fields(variable))
                         blocks[block_id].inputs = {"VALUE": numeric(value, block_id)}
                     case Repeat(times, body):
-                        if times < 0:
+                        if isinstance(times, (int, float)) and times < 0:
                             raise ValueError("Repeat count must be nonnegative")
-                        block_id = add("control_repeat", owner, {"TIMES": number(times)})
+                        block_id = add("control_repeat", owner)
+                        blocks[block_id].inputs = {"TIMES": numeric(times, block_id)}
                         substack(block_id, "SUBSTACK", body)
                     case If(predicate, then, otherwise):
                         block_id = add("control_if" if otherwise is None else "control_if_else", owner)
@@ -249,9 +340,29 @@ def compile_game(game: Game) -> bytes:
                 previous = block_id
             return first
 
+        for proc in sprite.procedures:
+            if len({arg.name for arg in proc.arguments}) != len(proc.arguments):
+                raise ValueError("Procedure argument names must be unique")
+            hat = add("procedures_definition", None, top_level=True)
+            prototype = add("procedures_prototype", hat)
+            blocks[prototype].shadow = True
+            blocks[prototype].mutation = procedure_mutation(proc, prototype=True)
+            blocks[hat].inputs = {"custom_block": [1, prototype]}
+            for i, arg in enumerate(proc.arguments):
+                node = add("argument_reporter_boolean" if arg.boolean else "argument_reporter_string_number",
+                           prototype, fields={"VALUE": [arg.name, None]})
+                blocks[node].shadow = True
+                blocks[prototype].inputs[f"arg:{i}"] = [1, node]
+            active_procedure = proc
+            blocks[hat].next = sequence(proc.body, hat)
+            active_procedure = None
+
         for script in sprite.scripts:
-            if script.clicked:
-                hat = add("event_whenthisspriteclicked", None, top_level=True)
+            if script.event is not None:
+                hat = add(script.event.opcode, None, fields=native_fields(script.event.fields), top_level=True)
+                blocks[hat].inputs = native_inputs(script.event.inputs, hat)
+            elif script.clicked:
+                hat = add("event_whenstageclicked" if is_stage else "event_whenthisspriteclicked", None, top_level=True)
             elif script.message is not None:
                 hat = add("event_whenbroadcastreceived", None, fields=message_fields(script.message, "BROADCAST_OPTION"), top_level=True)
             elif script.key is None:
@@ -259,7 +370,7 @@ def compile_game(game: Game) -> bytes:
             else:
                 hat = add("event_whenkeypressed", None, fields={"KEY_OPTION": [script.key.value, None]}, top_level=True)
             blocks[hat].next = sequence(script.body, hat)
-        targets.append({
+        target: dict[str, Json] = {
             **base, "isStage": False, "name": sprite.name, "variables": {},
             "blocks": {key: block.json(i) for i, (key, block) in enumerate(blocks.items(), 1)},
             "costumes": [costume(c, "Default" if i == 0 else f"Costume {i + 1}") for i, c in enumerate((sprite.costume, *sprite.costumes))],
@@ -267,9 +378,16 @@ def compile_game(game: Game) -> bytes:
             "x": sprite.x, "y": sprite.y, "size": 100, "direction": 90,
             "visible": True, "draggable": False, "rotationStyle": "all around",
             "layerOrder": len(targets),
-        })
+        }
+        if is_stage:
+            stage = targets[0]
+            assert isinstance(stage, dict)
+            for key in ("blocks", "costumes", "sounds"):
+                stage[key] = target[key]
+        else:
+            targets.append(target)
     project: dict[str, Json] = {
-        "targets": targets, "monitors": [], "extensions": [],
+        "targets": targets, "monitors": [], "extensions": list(game.extensions),
         "meta": {"semver": "3.0.0", "vm": "0.2.0", "agent": "itchy"},
     }
     assets["project.json"] = json.dumps(project, allow_nan=False).encode()
